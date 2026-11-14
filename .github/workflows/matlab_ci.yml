@@ -1,0 +1,36 @@
+name: Run MPC Simulation Benchmark
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  run-matlab-simulation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up MATLAB
+        uses: matlab-actions/setup-matlab@v2
+        with:
+          products: Control_System_Toolbox Optimization_Toolbox
+
+      - name: Run Full Simulation and Export Vector PDFs
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            main_simulation;
+            figs = findall(0, 'Type', 'figure');
+            for i = 1:length(figs)
+                saveas(figs(i), sprintf('Fig_%d.png', figs(i).Number));
+            end
+
+      - name: Upload Generated PDF & PNG Figures
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-figures
+          path: |
+            Fig_*.pdf
+            Fig_*.png
