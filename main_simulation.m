@@ -2,7 +2,7 @@
 % Sequential local run of the whole study. On GitHub Actions the same steps run
 % as parallel jobs (.github/workflows/matlab_ci.yml):
 %   1. train      : dataset -> architecture search -> Tiny-ML -> learning curves
-%   2. bench      : one job per case of experiment_config.m   (bench_case.m)
+%   2. bench      : cases of experiment_config.m over n_jobs   (bench_job.m)
 %   3. contexts   : one job per hidden latency formula         (context_case.m)
 %   4. report     : tables and figures                         (report_results.m,
 %                                                               combine_context_results.m)
@@ -21,8 +21,8 @@ plot_architecture();        % Fig_6.pdf
 
 % 2. Closed-loop benchmark cases
 cfg = experiment_config();
-for id = 1:cfg.n_cases
-    bench_case(id);
+for j = 1:cfg.n_jobs
+    bench_job(j);
 end
 
 % 3. Tiny-ML on hidden latency formulas

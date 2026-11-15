@@ -40,16 +40,17 @@ jobs:
             Fig_6.pdf
             train_log.txt
 
-  # 2. Closed-loop benchmark: one job per case of experiment_config.m
+  # 2. Closed-loop benchmark: 270 cases x 30 seeds, dealt round-robin to 60 jobs
   bench:
     needs: train
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 340
     strategy:
       fail-fast: false
       matrix:
-        case: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
-               21, 22, 23, 24, 25, 26, 27, 28, 29]
+        job: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+              21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,
+              41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -59,13 +60,13 @@ jobs:
         with:
           release: ${{ env.MATLAB_RELEASE }}
           products: ${{ env.MATLAB_PRODUCTS }}
-      - name: Run benchmark case ${{ matrix.case }}
+      - name: Run benchmark job ${{ matrix.job }}
         uses: matlab-actions/run-command@v2
         with:
-          command: bench_case(${{ matrix.case }});
+          command: bench_job(${{ matrix.job }});
       - uses: actions/upload-artifact@v4
         with:
-          name: bench-case-${{ matrix.case }}
+          name: bench-job-${{ matrix.job }}
           path: results/*.mat
 
   # 3. Tiny-ML on hidden latency formulas: one job per formula
@@ -108,7 +109,7 @@ jobs:
           name: tinyml
       - uses: actions/download-artifact@v4
         with:
-          pattern: bench-case-*
+          pattern: bench-job-*
           path: results
           merge-multiple: true
       - uses: actions/download-artifact@v4

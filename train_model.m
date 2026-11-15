@@ -30,18 +30,24 @@ for k = 1:2
     fprintf('%-32s | %9.4f | %9.4f | %8.4f\n', names{k}, mean(abs(e)), sqrt(mean(e.^2)), 1 - sum(e.^2) / sum((Yte - mean(Yte)).^2));
 end
 
-% Data-driven safety factor for deadline checks: 95th percentile of the ratio
-% (true latency / predicted latency) on the VALIDATION rollouts (never the test
-% set). The supervisor accepts a candidate only if margin * t_hat <= budget.
-ratio = Y(i_va) ./ max(predict_mlp(model, X(i_va, :)), 1e-6);
-model.margin = max(1, quantile_lin(ratio, 0.95));
-fprintf('Deadline safety factor (95th pct. of true/predicted on validation): %.3f\n', model.margin);
+% Upper-bound predictor for deadline checks: same architecture, log target,
+% pinball loss at the 0.95 quantile. A split-conformal factor computed on the
+% VALIDATION rollouts (95th percentile of true / predicted upper bound) makes the
+% coverage hold on held-out data; coverage on the TEST rollouts is reported.
+TAU = 0.95;
+qopts = struct('hidden', a.arch.hidden, 'log_target', true, 'quantile', TAU, 'seed', 43);
+model_q = train_mlp(X(i_tr, :), Y(i_tr), X(i_va, :), Y(i_va), qopts);
+ratio = Y(i_va) ./ max(predict_mlp(model_q, X(i_va, :)), 1e-6);
+model_q.margin = quantile_lin(ratio, TAU);
+ub_te = model_q.margin * predict_mlp(model_q, X(i_te, :));
+fprintf('Upper-bound predictor (q = %.2f): conformal factor %.3f, test coverage %.1f%%, mean overestimate %.1f%%\n', ...
+    TAU, model_q.margin, 100 * mean(Yte <= ub_te), 100 * mean((ub_te - Yte) ./ Yte));
 
 e = pred{1} - Yte;
 model.test_mae = mean(abs(e));
 model.test_r2  = 1 - sum(e.^2) / sum((Yte - mean(Yte)).^2);
 model.hist = hist;
-save('trained_predictor.mat', 'model');
+save('trained_predictor.mat', 'model', 'model_q');
 fprintf('Saved trained weights to trained_predictor.mat\n');
 end
 

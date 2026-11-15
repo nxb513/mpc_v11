@@ -22,7 +22,7 @@ S = scenario_levels(traj);
 [xr, ur, st] = generate_trajectories(traj, Ts, cfg.T_sim + cfg.preview_pad * Ts, S(cs.level).aggr, false);
 trj = ltv_model(xr, ur, Ts, p);
 
-fprintf('Case %d (part %d): %s, %s, %d Hz, CPU %.0f%%, disturbance %.1f m/s^2, %s weights, %d seeds\n', ...
+fprintf('Case %d (part %s): %s, %s, %d Hz, CPU %.0f%%, disturbance %.1f m/s^2, %s weights, %d seeds\n', ...
     id, cs.part, traj, cfg.levels{cs.level}, cs.freq, 100 * cs.cpu, cs.dist, cs.weights, n_seeds);
 fprintf('  reference: speed max %.1f m/s, tilt max %.0f deg, beyond rotor limits %.1f%% of the time\n', ...
     st.max, st.tilt_max_deg, st.ff_over);
@@ -58,5 +58,5 @@ ff = p.Mix_inv * (trj.u_ref(:, kk) + p.u_hover);
 out.case = cs; out.id = id; out.res = r; out.ref_stats = st;
 out.traces = traces; out.t = (0:M-2) * Ts; out.budget = T_bud;
 out.ref_over = any(ff > p.T_max | ff < p.T_min, 1);
-save(fullfile(out_dir, sprintf('bench_case_%02d.mat', id)), 'out');
+save(fullfile(out_dir, sprintf('bench_case_%03d.mat', id)), 'out');
 end

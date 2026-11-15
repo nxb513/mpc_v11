@@ -9,7 +9,11 @@ function [model, hist] = train_mlp(X_tr, Y_tr, X_va, Y_va, opts)
 % Training: Huber (Smooth-L1) loss on the fitted target, Adam, L2 weight decay,
 % mini-batches, early stopping on the validation MAE in ms (best weights restored).
 %
-% opts (all optional): hidden (default [32 16]), log_target (default false),
+% QUANTILE MODE: opts.quantile = tau (e.g. 0.95) replaces the Huber loss by the
+% pinball loss, so the network predicts the tau-quantile of the latency (an upper
+% bound for deadline checks); early stopping then uses the validation pinball loss.
+%
+% opts (all optional): hidden (default [32 16]), log_target (default false), quantile,
 %   seed, max_steps, batch_size, lr, lambda_l2, delta_huber, patience (epochs)
 % hist: per-epoch train/val loss (on the fitted target), val MAE [ms], best_epoch, steps.
 
@@ -60,7 +64,12 @@ for ep = 1:max_epochs
             Z{l} = A{l} * W{l} + b{l};
             if l < L, A{l+1} = max(0, Z{l}); else, A{l+1} = Z{l}; end
         end
-        dZ = max(-delta, min(delta, A{L+1} - T_tr(idx))) / numel(idx);
+        err = A{L+1} - T_tr(idx);
+        if isempty(o.quantile)
+            dZ = max(-delta, min(delta, err)) / numel(idx);            % Huber gradient
+        else
+            dZ = ((err > 0) * (1 - o.quantile) - (err < 0) * o.quantile) / numel(idx);   % pinball gradient
+        end
         for l = L:-1:1
             gW = A{l}' * dZ + 2 * o.lambda_l2 * W{l};
             gb = sum(dZ, 1);
@@ -76,12 +85,18 @@ for ep = 1:max_epochs
     end
 
     out_tr = forward(W, b, Xn_tr); out_va = forward(W, b, Xn_va);
-    hist.train_loss(ep) = huber(out_tr - T_tr, delta);
-    hist.val_loss(ep)   = huber(out_va - T_va, delta);
+    if isempty(o.quantile)
+        hist.train_loss(ep) = huber(out_tr - T_tr, delta);
+        hist.val_loss(ep)   = huber(out_va - T_va, delta);
+    else
+        hist.train_loss(ep) = pinball(T_tr - out_tr, o.quantile);
+        hist.val_loss(ep)   = pinball(T_va - out_va, o.quantile);
+    end
     if o.log_target, y_va = exp(out_va); else, y_va = out_va; end
     hist.val_mae(ep) = mean(abs(y_va - Y_va));
+    if isempty(o.quantile), crit = hist.val_mae(ep); else, crit = hist.val_loss(ep); end
 
-    if hist.val_mae(ep) < best - 1e-12
+    if crit < best - 1e-12
         best = hist.val_mae(ep); bestW = W; bestb = b; best_ep = ep; since = 0;
     else
         since = since + 1;
@@ -95,7 +110,7 @@ hist.best_epoch = best_ep; hist.steps = step;
 
 model.W = bestW; model.b = bestb;
 model.mu_X = mu_X; model.sig_X = sig_X;
-model.hidden = o.hidden; model.log_target = o.log_target;
+model.hidden = o.hidden; model.log_target = o.log_target; model.quantile = o.quantile;
 model.n_params = sum(cellfun(@numel, bestW)) + sum(cellfun(@numel, bestb));
 model.flops = 2 * sum(dims(1:end-1) .* dims(2:end));   % mult-adds of one forward pass
 model.opts = o;
@@ -110,6 +125,11 @@ end
 y = a;
 end
 
+function L = pinball(r, tau)
+% pinball (quantile) loss of residual r = y - y_hat
+L = mean(max(tau * r, (tau - 1) * r));
+end
+
 function Lh = huber(e, d)
 a = abs(e);
 Lh = mean((a <= d) .* 0.5 .* e.^2 + (a > d) .* (d * a - 0.5 * d^2));
@@ -118,7 +138,7 @@ end
 function o = local_defaults(o)
 def = struct('hidden', [32 16], 'log_target', false, 'seed', 42, 'max_steps', 20000, ...
     'batch_size', 128, 'lr', 0.005, 'lambda_l2', 1e-4, 'delta_huber', 1.5, ...
-    'delta_huber_log', 0.5, 'patience', 40);
+    'delta_huber_log', 0.5, 'patience', 40, 'quantile', []);
 fn = fieldnames(def);
 for k = 1:numel(fn)
     if ~isfield(o, fn{k}), o.(fn{k}) = def.(fn{k}); end

@@ -1,156 +1,194 @@
 function report_results(in_dir)
-% REPORT_RESULTS Gathers results/bench_case_*.mat (bench_case.m, n seeds per
-% case), prints statistics and exports Fig_1, Fig_2, Fig_3, Fig_8, Fig_9.
+% REPORT_RESULTS Gathers results/bench_case_*.mat (bench_case.m), prints the
+% statistics of the full grid (experiment_config.m) and exports Fig_1, Fig_2,
+% Fig_3, Fig_8, Fig_9.
 %
 % Statistics (no toolbox needed):
 %   * RMSE: mean over the NON-crashed seeds with a 95 % bootstrap percentile CI
 %     (10 000 resamples, fixed seed). Crashes are reported as counts.
-%   * Paired comparison Proposed vs each baseline on the SAME seeds where neither
-%     crashed: mean RMSE difference (negative = Proposed better) with a 95 %
-%     bootstrap CI, and the share of seeds won by Proposed.
+%   * Paired comparison of Proposed with each baseline on the SAME seeds where
+%     neither crashed: mean relative RMSE difference (Proposed - baseline) /
+%     baseline, with a 95 % bootstrap CI, and the share of seeds won by Proposed.
+%     A case counts as "better" / "worse" when the CI excludes 0.
 if nargin < 1, in_dir = 'results'; end
 cfg = experiment_config();
-nC = numel(cfg.controllers); iP = nC;     % Proposed is the last controller
+nC = numel(cfg.controllers); iP = nC;
 B = cell(1, cfg.n_cases);
 for id = 1:cfg.n_cases
-    s = load(fullfile(in_dir, sprintf('bench_case_%02d.mat', id)));
+    s = load(fullfile(in_dir, sprintf('bench_case_%03d.mat', id)));
     B{id} = s.out;
 end
-parts = cellfun(@(o) o.case.part, B);
 nSeed = size(B{1}.res.rmse, 1);
+parts = cellfun(@(o) o.case.part, B);
+nL = numel(cfg.levels); nT = numel(cfg.trajectories);
 
-% ---- per-case tables ----------------------------------------------------------------
-titles = {'PART 1: scenario ladder (50 Hz, CPU 50%, disturbance 0.5 m/s^2)', ...
-          'PART 2: control-rate sweep at S3 (lemniscate)', ...
-          'PART 3: mean CPU load x disturbance at S3 (lemniscate, 50 Hz)', ...
-          'PART 4: loose Bryson weights at S3 (50 Hz)'};
-fprintf('All statistics over %d seeds per case.\n', nSeed);
-for pt = 1:4
-    fprintf('\n=== %s ===\n', titles{pt});
-    for id = find(parts == pt)
-        o = B{id}; cs = o.case; r = o.res;
-        fprintf('\n%s, %s, %d Hz, CPU %.0f%%, dist %.1f, %s | ref beyond limits %.1f%%\n', ...
-            cfg.trajectories{cs.traj}, cfg.levels{cs.level}, cs.freq, 100 * cs.cpu, cs.dist, cs.weights, o.ref_stats.ff_over);
-        fprintf('  %-30s | %-26s | %7s | %8s | %10s | %6s\n', 'Controller', 'RMSE (m) mean [95% CI]', 'crashes', 'miss (%)', 'CPU (ms/s)', 'mean N');
-        for c = 1:nC
-            [m, lo, hi] = boot_mean(r.rmse(~r.crash(:, c), c));
-            fprintf('  %-30s | %8.4f [%7.4f, %7.4f] | %4d/%-2d | %8.2f | %10.1f | %6.2f\n', cfg.labels{c}, m, lo, hi, ...
-                sum(r.crash(:, c)), nSeed, mean(r.miss(:, c)), mean(r.cpu_ms_per_s(:, c)), mean(r.N_mean(:, c)));
-        end
-        for c = 1:nC-1
-            [d, lo, hi, win, n] = paired(r, iP, c);
-            fprintf('  Proposed - %-19s : %+8.4f m [%+.4f, %+.4f], Proposed better on %3.0f%% of %d paired seeds\n', ...
-                cfg.labels{c}, d, lo, hi, win, n);
-        end
-    end
-end
-
-% ---- Part 1 aggregates ------------------------------------------------------------------
-nT = 3; nS = 4;
-mean1 = nan(nS, nT, nC); lo1 = mean1; hi1 = mean1; crash1 = zeros(nS, nT, nC); miss1 = mean1; cpu1 = mean1;
-for id = find(parts == 1)
-    cs = B{id}.case; r = B{id}.res;
+% ---- per-case summary ------------------------------------------------------------
+rel = nan(cfg.n_cases, nC - 1, 3);      % (case, baseline, [mean lo hi]) relative diff Proposed - baseline
+win = nan(cfg.n_cases, nC - 1);
+crash = zeros(cfg.n_cases, nC); rm = nan(cfg.n_cases, nC); miss = rm; cpu = rm;
+fprintf('All statistics over %d seeds per case, %d cases.\n\n', nSeed, cfg.n_cases);
+fprintf('%-4s %-4s %-10s %-14s %4s %4s %4s %-5s |', 'id', 'part', 'traj', 'level', 'Hz', 'CPU', 'dist', 'W');
+fprintf(' %-17s |', 'Fixed5', 'Fixed10', 'Nominal', 'Proposed');
+fprintf(' P vs Fixed5 [95%% CI] win  | P vs Nominal [95%% CI] win\n');
+for id = 1:cfg.n_cases
+    o = B{id}; cs = o.case; r = o.res;
     for c = 1:nC
-        [mean1(cs.level, cs.traj, c), lo1(cs.level, cs.traj, c), hi1(cs.level, cs.traj, c)] = boot_mean(r.rmse(~r.crash(:, c), c));
-        crash1(cs.level, cs.traj, c) = sum(r.crash(:, c));
-        miss1(cs.level, cs.traj, c) = mean(r.miss(:, c));
-        cpu1(cs.level, cs.traj, c) = mean(r.cpu_ms_per_s(:, c));
+        crash(id, c) = sum(r.crash(:, c));
+        rm(id, c) = mean(r.rmse(~r.crash(:, c), c));
+        miss(id, c) = mean(r.miss(:, c)); cpu(id, c) = mean(r.cpu_ms_per_s(:, c));
     end
-end
-fprintf('\nSUMMARY Part 1: mean RMSE (m) over the 3 trajectories | crashes out of %d runs per level\n', 3 * nSeed);
-fprintf('%-30s |', 'Controller'); fprintf(' %-22s |', cfg.levels{:}); fprintf('\n');
-for c = 1:nC
-    fprintf('%-30s |', cfg.labels{c});
-    for s = 1:nS
-        fprintf(' %8.4f  crash %3d   |', mean(mean1(s, :, c), 'omitnan'), sum(crash1(s, :, c)));
+    for c = 1:nC-1
+        [rel(id, c, 1), rel(id, c, 2), rel(id, c, 3), win(id, c)] = paired_rel(r, iP, c);
     end
-    fprintf('\n');
+    fprintf('%-4d %-4s %-10s %-14s %4d %4.0f %4.1f %-5s |', id, cs.part, cfg.trajectories{cs.traj}, ...
+        cfg.levels{cs.level}, cs.freq, 100 * cs.cpu, cs.dist, cs.weights);
+    for c = 1:nC
+        fprintf(' %7.4f crash%3d |', rm(id, c), crash(id, c));
+    end
+    fprintf(' %+6.1f%% [%+6.1f,%+6.1f] %3.0f%% | %+6.1f%% [%+6.1f,%+6.1f] %3.0f%%\n', ...
+        100 * rel(id, 1, 1), 100 * rel(id, 1, 2), 100 * rel(id, 1, 3), win(id, 1), ...
+        100 * rel(id, 3, 1), 100 * rel(id, 3, 2), 100 * rel(id, 3, 3), win(id, 3));
 end
 
-% ---- Figures ------------------------------------------------------------------------------
+% ---- global verdicts ---------------------------------------------------------------
+fprintf('\n=== OVERALL: Proposed vs each baseline (case counted when the 95%% CI excludes 0) ===\n');
+for c = 1:nC-1
+    hi = rel(:, c, 3); lo = rel(:, c, 2); valid = ~isnan(rel(:, c, 1));
+    better = sum(hi < 0); worse = sum(lo > 0); ns = sum(valid) - better - worse;
+    fprintf('vs %-26s : better in %3d, worse in %3d, no significant difference in %3d, not comparable (crashes) %3d of %d cases\n', ...
+        cfg.labels{c}, better, worse, ns, sum(~valid), cfg.n_cases);
+end
+fprintf('\nCrashed runs per controller (out of %d runs):\n', cfg.n_cases * nSeed);
+for c = 1:nC
+    fprintf('  %-30s : %5d  (%.1f%%)\n', cfg.labels{c}, sum(crash(:, c)), 100 * sum(crash(:, c)) / (cfg.n_cases * nSeed));
+end
+
+% per level, Part A (all rates and loads pooled)
+fprintf('\n=== Part A by scenario level (all trajectories, rates and CPU loads) ===\n');
+fprintf('%-14s |', 'Level'); fprintf(' %-22s |', cfg.labels{:}); fprintf(' P better / worse vs Fixed5 | vs Nominal\n');
+for s = 1:nL
+    ids = find(parts == 'A' & cellfun(@(o) o.case.level == s, B));
+    fprintf('%-14s |', cfg.levels{s});
+    for c = 1:nC
+        fprintf(' RMSE %6.4f crash %4.1f%% |', mean(rm(ids, c), 'omitnan'), 100 * sum(crash(ids, c)) / (numel(ids) * nSeed));
+    end
+    fprintf(' %3d / %3d of %3d | %3d / %3d\n', sum(rel(ids, 1, 3) < 0), sum(rel(ids, 1, 2) > 0), numel(ids), ...
+        sum(rel(ids, 3, 3) < 0), sum(rel(ids, 3, 2) > 0));
+end
+for pt = 'BC'
+    if pt == 'B', ttl = 'Part B (disturbance 0 and 1.0 m/s^2)'; else, ttl = 'Part C (loose Bryson weights)'; end
+    ids = find(parts == pt);
+    v1 = ~isnan(rel(ids, 1, 1)); v3 = ~isnan(rel(ids, 3, 1));
+    fprintf('\n%s: Proposed better / worse / n.s. / not comparable vs Fixed5: %d / %d / %d / %d; vs Nominal: %d / %d / %d / %d (of %d)\n', ttl, ...
+        sum(rel(ids, 1, 3) < 0), sum(rel(ids, 1, 2) > 0), sum(v1) - sum(rel(ids, 1, 3) < 0) - sum(rel(ids, 1, 2) > 0), sum(~v1), ...
+        sum(rel(ids, 3, 3) < 0), sum(rel(ids, 3, 2) > 0), sum(v3) - sum(rel(ids, 3, 3) < 0) - sum(rel(ids, 3, 2) > 0), sum(~v3), numel(ids));
+end
+
+% ---- Figures ----------------------------------------------------------------------------
 colors = [0.25 0.55 0.85; 0.85 0.35 0.25; 0.50 0.35 0.70; 0.15 0.68 0.38];
 markers = {'o', 's', 'd', 'p'};
+isA0 = @(o) o.case.part == 'A' && o.case.freq == cfg.freq0 && o.case.cpu == cfg.cpu0;
 
-% Fig 1: Proposed controller trace (Part 1, lemniscate, S3, first seed)
-id1 = find(parts == 1 & cellfun(@(o) o.case.traj == 1 && o.case.level == 3, B), 1);
+% Fig 1: proposed trace, lemniscate, S4, 50 Hz, CPU 50 %, first seed
+id1 = find(cellfun(@(o) isA0(o) && o.case.traj == 1 && o.case.level == 4, B), 1);
 o = B{id1}; tr = o.traces{iP}; n = tr.n_done; t = o.t(1:n);
 f1 = figure('Name', 'Fig 1', 'Color', 'w', 'Position', [80, 80, 980, 520]);
 tl = tiledlayout(f1, 3, 1, 'TileSpacing', 'compact');
 ax = nexttile(tl); plot(ax, t, 100 * tr.cpu(1:n), 'k-', 'LineWidth', 0.8); ylabel(ax, 'CPU load (%)'); grid(ax, 'on');
-ax = nexttile(tl); hold(ax, 'on');
-plot(ax, t, tr.lat(1:n), 'b-', 'LineWidth', 1.0);
-yline(ax, o.budget, 'r--', sprintf('Budget %.0f ms', o.budget), 'LineWidth', 1.3);
-ylabel(ax, 'Solve latency (ms)'); grid(ax, 'on');
+ax = nexttile(tl); hold(ax, 'on'); plot(ax, t, tr.lat(1:n), 'b-', 'LineWidth', 1.0);
+yline(ax, o.budget, 'r--', sprintf('Budget %.0f ms', o.budget), 'LineWidth', 1.3); ylabel(ax, 'Solve latency (ms)'); grid(ax, 'on');
 ax = nexttile(tl); stairs(ax, t, tr.N(1:n), 'Color', colors(iP, :), 'LineWidth', 1.2);
 ylabel(ax, 'Selected N'); xlabel(ax, 'Time (s)'); grid(ax, 'on');
-title(tl, 'Fig 1: Proposed Tiny-ML scheduler (S3, lemniscate, 50 Hz): horizon follows the available computation');
+title(tl, 'Fig 1: Proposed Tiny-ML scheduler (lemniscate, S4, 50 Hz, mean CPU load 50%)');
 
-% Fig 2: RMSE vs level with 95 % CI, per trajectory
+% Fig 2: RMSE vs level at the nominal rate / load, with 95 % CI
 f2 = figure('Name', 'Fig 2', 'Color', 'w', 'Position', [100, 100, 1200, 440]);
-tl = tiledlayout(f2, 1, 3, 'TileSpacing', 'compact');
+tl = tiledlayout(f2, 1, nT, 'TileSpacing', 'compact');
 for trj = 1:nT
     ax = nexttile(tl); hold(ax, 'on');
     for c = 1:nC
-        x = (1:nS) + (c - (nC + 1) / 2) * 0.08;
-        m = mean1(:, trj, c);
-        errorbar(ax, x, m, m - lo1(:, trj, c), hi1(:, trj, c) - m, ['-' markers{c}], 'Color', colors(c, :), ...
-            'LineWidth', 1.4, 'MarkerFaceColor', colors(c, :), 'CapSize', 4);
+        m = nan(1, nL); lo = m; hi = m;
+        for s = 1:nL
+            id = find(cellfun(@(o) isA0(o) && o.case.traj == trj && o.case.level == s, B), 1);
+            r = B{id}.res; [m(s), lo(s), hi(s)] = boot_mean(r.rmse(~r.crash(:, c), c));
+        end
+        x = (1:nL) + (c - (nC + 1) / 2) * 0.08;
+        errorbar(ax, x, m, m - lo, hi - m, ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.3, ...
+            'MarkerFaceColor', colors(c, :), 'CapSize', 3);
     end
-    set(ax, 'XTick', 1:nS, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 20); grid(ax, 'on');
+    set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); grid(ax, 'on');
     title(ax, cfg.trajectories{trj}); ylabel(ax, 'Position RMSE (m)');
 end
 legend(nexttile(tl, 1), cfg.labels, 'Location', 'northwest', 'FontSize', 8);
-title(tl, sprintf('Fig 2: Tracking error vs actuator demand (mean and 95%% CI over %d seeds, crashed runs excluded)', nSeed));
+title(tl, sprintf('Fig 2: Tracking error vs scenario level (50 Hz, CPU 50%%; mean and 95%% CI over %d seeds, crashed runs excluded)', nSeed));
 
-% Fig 3: crashes, misses and solver time vs level
+% Fig 3: crash rate, deadline misses, solver time vs level (Part A pooled)
 f3 = figure('Name', 'Fig 3', 'Color', 'w', 'Position', [120, 120, 1200, 420]);
 tl = tiledlayout(f3, 1, 3, 'TileSpacing', 'compact');
-ax = nexttile(tl); bar(ax, squeeze(sum(crash1, 2)) / (3 * nSeed) * 100); grid(ax, 'on');
-set(ax, 'XTickLabel', cfg.levels); ylabel(ax, 'Crashed runs (%)');
+CR = nan(nL, nC); MS = CR; CP = CR;
+for s = 1:nL
+    ids = find(parts == 'A' & cellfun(@(o) o.case.level == s, B));
+    CR(s, :) = 100 * sum(crash(ids, :), 1) / (numel(ids) * nSeed);
+    MS(s, :) = mean(miss(ids, :), 1); CP(s, :) = mean(cpu(ids, :), 1);
+end
+ax = nexttile(tl); b = bar(ax, CR); for c = 1:nC, b(c).FaceColor = colors(c, :); end
+set(ax, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Crashed runs (%)'); grid(ax, 'on');
 ax = nexttile(tl); hold(ax, 'on');
-for c = 1:nC, plot(ax, 1:nS, mean(miss1(:, :, c), 2), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.5); end
-set(ax, 'XTick', 1:nS, 'XTickLabel', cfg.levels); ylabel(ax, 'Deadline misses (%)'); grid(ax, 'on');
+for c = 1:nC, plot(ax, 1:nL, MS(:, c), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4); end
+set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Deadline misses (%)'); grid(ax, 'on');
 ax = nexttile(tl); hold(ax, 'on');
-for c = 1:nC, plot(ax, 1:nS, mean(cpu1(:, :, c), 2), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.5); end
-set(ax, 'XTick', 1:nS, 'XTickLabel', cfg.levels); ylabel(ax, 'Solver time per second of flight (ms/s)'); grid(ax, 'on');
+for c = 1:nC, plot(ax, 1:nL, CP(:, c), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4); end
+set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Solver time per second of flight (ms/s)'); grid(ax, 'on');
 legend(ax, cfg.labels, 'Location', 'northwest', 'FontSize', 8);
-title(tl, 'Fig 3: Safety and real-time cost vs actuator demand (all trajectories and seeds)');
+title(tl, 'Fig 3: Safety and real-time cost vs scenario level (Part A: all trajectories, rates and CPU loads)');
 
-% Fig 8: rate sweep with CI
-ids = find(parts == 2); fr = cellfun(@(o) o.case.freq, B(ids)); [fr, ix] = sort(fr); ids = ids(ix);
-f8 = figure('Name', 'Fig 8', 'Color', 'w', 'Position', [140, 140, 1100, 420]);
-tl = tiledlayout(f8, 1, 2, 'TileSpacing', 'compact');
-ax = nexttile(tl); hold(ax, 'on'); ax2 = nexttile(tl); hold(ax2, 'on');
-for c = 1:nC
-    m = nan(size(fr)); lo = m; hi = m; cr = m;
-    for k = 1:numel(ids)
-        r = B{ids(k)}.res; [m(k), lo(k), hi(k)] = boot_mean(r.rmse(~r.crash(:, c), c)); cr(k) = 100 * mean(r.crash(:, c));
+% Fig 8: relative RMSE change of Proposed vs Fixed N=5 over rate x CPU load, per level
+f8 = figure('Name', 'Fig 8', 'Color', 'w', 'Position', [140, 140, 1250, 640]);
+tl = tiledlayout(f8, 2, 3, 'TileSpacing', 'compact');
+for s = 1:nL
+    Hm = nan(numel(cfg.cpu_set), numel(cfg.freqs));
+    for i = 1:numel(cfg.cpu_set)
+        for j = 1:numel(cfg.freqs)
+            ids = find(cellfun(@(o) o.case.part == 'A' && o.case.level == s && o.case.cpu == cfg.cpu_set(i) ...
+                && o.case.freq == cfg.freqs(j), B));
+            Hm(i, j) = 100 * mean(rel(ids, 1, 1), 'omitnan');
+        end
     end
-    errorbar(ax, fr, m, m - lo, hi - m, ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4, 'CapSize', 4);
-    plot(ax2, fr, cr, ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4);
+    ax = nexttile(tl);
+    imagesc(ax, Hm, 'AlphaData', ~isnan(Hm)); set(ax, 'Color', [0.85 0.85 0.85]);
+    caxis(ax, [-40 40]); colormap(ax, local_diverging());
+    set(ax, 'XTick', 1:numel(cfg.freqs), 'XTickLabel', cfg.freqs, 'YTick', 1:numel(cfg.cpu_set), ...
+        'YTickLabel', 100 * cfg.cpu_set, 'YDir', 'normal');
+    for i = 1:numel(cfg.cpu_set)
+        for j = 1:numel(cfg.freqs)
+            if ~isnan(Hm(i, j)), text(ax, j, i, sprintf('%+.0f%%', Hm(i, j)), 'HorizontalAlignment', 'center', 'FontSize', 8); end
+        end
+    end
+    title(ax, cfg.levels{s}); xlabel(ax, 'Control rate (Hz)'); ylabel(ax, 'Mean CPU load (%)');
 end
-xlabel(ax, 'Control rate (Hz)'); ylabel(ax, 'Position RMSE (m)'); grid(ax, 'on');
-xlabel(ax2, 'Control rate (Hz)'); ylabel(ax2, 'Crashed runs (%)'); grid(ax2, 'on');
-legend(ax2, cfg.labels, 'Location', 'northwest', 'FontSize', 8);
-title(tl, 'Fig 8: Control-rate sweep at S3 (lemniscate), mean and 95% CI');
+cb = colorbar(ax); cb.Layout.Tile = 'east'; cb.Label.String = 'Proposed vs Fixed N=5: RMSE change (%)';
+title(tl, 'Fig 8: Relative tracking-error change of Proposed vs Fixed N=5 (negative = better; grey = not comparable, crashes)');
 
-% Fig 9: CPU load x disturbance
-M3 = nan(nC, 3, 3); C3 = M3;
-for id = find(parts == 3)
-    cs = B{id}.case; r = B{id}.res;
-    i = find(cfg.cpu_set == cs.cpu); j = find(cfg.dist_set == cs.dist);
-    for c = 1:nC
-        M3(c, i, j) = mean(r.rmse(~r.crash(:, c), c)); C3(c, i, j) = 100 * mean(r.crash(:, c));
-    end
-end
-f9 = figure('Name', 'Fig 9', 'Color', 'w', 'Position', [160, 160, 1100, 440]);
+% Fig 9: Parts B and C, relative change vs Fixed N=5 and vs Nominal per level
+f9 = figure('Name', 'Fig 9', 'Color', 'w', 'Position', [160, 160, 1150, 440]);
 tl = tiledlayout(f9, 1, 2, 'TileSpacing', 'compact');
-ax = nexttile(tl); bar(ax, 100 * cfg.cpu_set, squeeze(M3(:, :, 2))'); grid(ax, 'on');
-xlabel(ax, 'Mean CPU load (%)'); ylabel(ax, 'Position RMSE (m)'); title(ax, 'Disturbance 0.5 m/s^2');
-ax = nexttile(tl); bar(ax, 100 * cfg.cpu_set, squeeze(C3(:, :, 2))'); grid(ax, 'on');
-xlabel(ax, 'Mean CPU load (%)'); ylabel(ax, 'Crashed runs (%)'); title(ax, 'Disturbance 0.5 m/s^2');
-legend(ax, cfg.labels, 'Location', 'northwest', 'FontSize', 8);
-title(tl, 'Fig 9: Sensitivity to the background CPU load at S3 (lemniscate)');
+conds = {@(o) o.case.part == 'B' && o.case.dist == 0, 'disturbance 0'; ...
+         @(o) isA0(o), 'disturbance 0.5 (Part A)'; ...
+         @(o) o.case.part == 'B' && o.case.dist == 1.0, 'disturbance 1.0'; ...
+         @(o) o.case.part == 'C', 'loose weights'};
+for bb = [1, 3]
+    ax = nexttile(tl); V = nan(nL, size(conds, 1));
+    for k = 1:size(conds, 1)
+        for s = 1:nL
+            ids = find(cellfun(@(o) conds{k, 1}(o) && o.case.level == s, B));
+            V(s, k) = 100 * mean(rel(ids, bb, 1), 'omitnan');
+        end
+    end
+    bar(ax, V); grid(ax, 'on'); set(ax, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30);
+    ylabel(ax, sprintf('RMSE change vs %s (%%)', cfg.labels{bb}));
+    legend(ax, conds(:, 2), 'Location', 'southwest', 'FontSize', 8);
+end
+title(tl, 'Fig 9: Robustness of the improvement to disturbance level and weights (mean over trajectories; negative = Proposed better)');
 
 figs = {f1, 'Fig_1.pdf'; f2, 'Fig_2.pdf'; f3, 'Fig_3.pdf'; f8, 'Fig_8.pdf'; f9, 'Fig_9.pdf'};
 for i = 1:size(figs, 1)
@@ -160,7 +198,7 @@ for i = 1:size(figs, 1)
         print(figs{i, 1}, figs{i, 2}, '-dpdf', '-painters');
     end
 end
-save('benchmark_results.mat', 'B', 'cfg');
+save('benchmark_results.mat', 'B', 'cfg', 'rel', 'win', 'crash', 'rm', 'miss', 'cpu');
 end
 
 % =========================================================================================
@@ -170,16 +208,21 @@ if isempty(x), m = NaN; lo = NaN; hi = NaN; return; end
 m = mean(x);
 if numel(x) < 2, lo = m; hi = m; return; end
 rs = RandStream('mt19937ar', 'Seed', 12345);
-bm = mean(x(randi(rs, numel(x), numel(x), 10000)), 1);
-bm = sort(bm);
-lo = bm(max(1, round(0.025 * 10000))); hi = bm(round(0.975 * 10000));
+bm = sort(mean(x(randi(rs, numel(x), numel(x), 10000)), 1));
+lo = bm(250); hi = bm(9750);
 end
 
-function [d, lo, hi, win, n] = paired(r, a, b)
+function [d, lo, hi, w] = paired_rel(r, a, b)
 ok = ~r.crash(:, a) & ~r.crash(:, b);
-diffs = r.rmse(ok, a) - r.rmse(ok, b);
-n = sum(ok);
-[d, lo, hi] = boot_mean(diffs);
-win = 100 * mean(diffs < 0);
-if n == 0, win = NaN; end
+if sum(ok) < 3, d = NaN; lo = NaN; hi = NaN; w = NaN; return; end
+x = (r.rmse(ok, a) - r.rmse(ok, b)) ./ r.rmse(ok, b);
+[d, lo, hi] = boot_mean(x);
+w = 100 * mean(x < 0);
+end
+
+function cm = local_diverging()
+n = 128;
+up = [linspace(0.15, 1, n)', linspace(0.55, 1, n)', linspace(0.25, 1, n)'];
+dn = [linspace(1, 0.80, n)', linspace(1, 0.25, n)', linspace(1, 0.20, n)'];
+cm = [up; dn];
 end

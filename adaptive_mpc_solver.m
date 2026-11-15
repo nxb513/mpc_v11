@@ -8,10 +8,10 @@ function [f_rotor, info, mem] = adaptive_mpc_solver(mode, x_curr, k, trj, Q, R, 
 %                           formula (qp_latency_model.m, the calibration believed
 %                           before flight, with I_max iterations as worst case)
 %                           fits the budget, every step
-%   'proposed'            : largest (N, I_max) whose latency predicted by the
-%                           Tiny-ML model (learned from data, formula unknown)
-%                           times its data-driven safety factor fits the budget,
-%                           every step
+%   'proposed'            : largest (N, I_max) whose latency UPPER BOUND predicted
+%                           by the Tiny-ML quantile model (learned from data,
+%                           formula unknown, conformal-calibrated 95 % coverage)
+%                           fits the budget, every step
 %   'dataset_<N>_<I>'     : explicit (N, I_max) for data collection
 %
 % Deadline miss: the late QP solution is not applied. The controller applies the
@@ -42,8 +42,7 @@ switch lower(mode)
         for iN = numel(CAND_N):-1:1
             for iI = numel(CAND_I):-1:1
                 if strcmpi(mode, 'proposed')
-                    [t_hat, margin] = tiny_ml_predictor(CAND_N(iN), CAND_I(iI), cpu_load, pos_err_norm, vel_err_norm);
-                    t_hat = margin * t_hat;
+                    t_hat = tiny_ml_predictor(CAND_N(iN), CAND_I(iI), cpu_load, pos_err_norm, vel_err_norm);   % calibrated upper bound
                 else
                     t_hat = qp_latency_model(CAND_N(iN), nx, nu, 14 * CAND_N(iN) + 2, CAND_I(iI), cpu_load, 1.0);
                 end
