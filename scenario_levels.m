@@ -1,7 +1,7 @@
 function S = scenario_levels(traj_type)
 % SCENARIO_LEVELS Ladder of six flight scenarios for one trajectory shape, defined
 % by how much the reference demands relative to the physical actuator limits of
-% the platform (quad_params.m, [S2] Table I), not by hand-picked factors:
+% the platform (quad_params.m, [S2] Table I):
 %
 %   S1 nominal     : aggressiveness 1 (reference well inside the rotor limits)
 %   S2 half-way    : aggressiveness midway between S1 and S3
@@ -17,7 +17,7 @@ function S = scenario_levels(traj_type)
 
 persistent cache
 if isempty(cache), cache = containers.Map(); end
-key = [lower(traj_type), '_', quad_params().name];
+key = lower(traj_type);
 if isKey(cache, key)
     S = cache(key);
     return;
@@ -37,7 +37,7 @@ cache(key) = S;
 end
 
 function v = local_over(traj_type, a)
-[~, ~, st] = generate_trajectories(traj_type, 0.025, 30, a, false);
+[~, ~, st] = generate_trajectories(traj_type, 0.025, 30, a);
 v = st.ff_over;
 end
 

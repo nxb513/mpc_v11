@@ -6,7 +6,7 @@ function trj = ltv_model(x_ref, u_ref, Ts, p)
 %              (x_ref_k, u_ref_k) (central differences, then matrix exponential)
 %   c_k      : defect F(x_ref_k, u_ref_k) - x_ref_{k+1}, F = nonlinear RK4 step.
 % The reference is fixed, so the model is computed once per trajectory and reused
-% by all controllers; the ONLINE cost of condensing it into a QP is accounted
+% by all controllers; the online cost of condensing it into a QP is accounted
 % for in the latency model (qp_latency_model.m / true_latency.m).
 
 if nargin < 4, p = quad_params(); end

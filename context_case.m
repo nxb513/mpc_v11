@@ -1,4 +1,4 @@
-function r = context_case(k, out_dir, quick)
+function r = context_case(k, out_dir)
 % CONTEXT_CASE One latency context of the Tiny-ML study (see context_study.m):
 % generate data with hidden latency formula k, retrain the fixed architecture
 % from scratch on n = 25 ... 51200 samples (5 repeats), save
@@ -6,7 +6,6 @@ function r = context_case(k, out_dir, quick)
 % Needs arch_choice.mat.
 
 if nargin < 2 || isempty(out_dir), out_dir = 'results'; end
-if nargin < 3, quick = false; end   % quick = true: tiny smoke-test version
 if ischar(k) || isstring(k), k = str2double(k); end
 if ~isfolder(out_dir), mkdir(out_dir); end
 
@@ -14,7 +13,6 @@ SAT_TOL = 0.05;
 R = 5;
 sizes = [25, 50, 100, 200, 400, 800, 1600, 3200, 6400, 12800, 25600, 51200];
 n_ctx_samples = 76000;          % 70 % pool >= 51200 training samples
-if quick, sizes = sizes(1:5); n_ctx_samples = 1500; R = 2; end
 ctx = context_list();
 c = ctx{k};
 

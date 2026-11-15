@@ -1,18 +1,18 @@
 function data = generate_large_dataset(opts)
-% GENERATE_LARGE_DATASET Latency dataset from CLOSED-LOOP rollouts of the LTV-MPC
+% GENERATE_LARGE_DATASET Latency dataset from closed-loop rollouts of the LTV-MPC
 % on the nonlinear quadrotor (same plant, references, QP and timing model as the
 % benchmark).
 %
 % At every control step a random (N, I_max) pair is drawn from the controllers'
-% candidate sets, the QP is solved, and the features observed BEFORE the solve,
+% candidate sets, the QP is solved, and the features observed before the solve,
 %   [N, I_max, cpu_load, ||e_pos||, ||e_vel||],
 % are stored with the resulting latency.
 %
-% BLACK-BOX PROTOCOL: the latency generator (true_latency.m, hidden parameters in
+% black-box protocol: the latency generator (true_latency.m, hidden parameters in
 % latency_context.m) is only called here. The learner (train_mlp.m) receives
 % nothing but X_raw / Y_lat. G_roll stores the rollout id of every sample.
 %
-% Each rollout draws: a trajectory shape, a scenario level S1..S4
+% Each rollout draws: a trajectory shape, a scenario level S1..S6
 % (scenario_levels.m), a control frequency, a mean CPU load and a disturbance
 % level from the experiment grids below.
 %
@@ -55,14 +55,14 @@ while i < num_samples
     freq = opts.freq_set(randi(numel(opts.freq_set)));
     Ts = 1 / freq;
     T_bud = Ts * 1000;
-    [Ad, Bd] = quadrotor_model(Ts, 1.0);
+    [Ad, Bd] = quadrotor_model(Ts);
     [K_lqr, P_term] = lqr_controller(Ad, Bd, Q, R);
 
     traj = opts.traj_set{randi(numel(opts.traj_set))};
     SL = scenario_levels(traj);
     lev = SL(randi(numel(SL)));
     t_off = 30 * rand();            % random phase: rollouts do not replay the evaluation runs
-    [x_full, u_full] = generate_trajectories(traj, Ts, t_off + T_roll + 20 * Ts, lev.aggr, false);
+    [x_full, u_full] = generate_trajectories(traj, Ts, t_off + T_roll + 20 * Ts, lev.aggr);
     k0 = round(t_off / Ts) + 1;
     x_ref = x_full(:, k0:end); u_ref = u_full(:, k0:end);
     trj = ltv_model(x_ref, u_ref, Ts, pq);

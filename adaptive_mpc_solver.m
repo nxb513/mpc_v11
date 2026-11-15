@@ -4,19 +4,19 @@ function [f_rotor, info, mem] = adaptive_mpc_solver(mode, x_curr, k, trj, Q, R, 
 %
 % Controllers (all share Q, R, P_term, constraints and fallback):
 %   'fixed_5', 'fixed_10' : fixed horizon, iteration cap 40
-%   'nominal_max'         : largest (N, I_max) whose latency from the NOMINAL
+%   'nominal_max'         : largest (N, I_max) whose latency from the nominal
 %                           formula (qp_latency_model.m, the calibration believed
 %                           before flight, with I_max iterations as worst case)
 %                           fits the budget, every step
-%   'proposed'            : largest (N, I_max) whose latency UPPER BOUND predicted
+%   'proposed'            : largest (N, I_max) whose latency upper bound predicted
 %                           by the Tiny-ML quantile model (learned from data,
 %                           formula unknown, conformal-calibrated 95 % coverage)
 %                           fits the budget, every step
 %   'dataset_<N>_<I>'     : explicit (N, I_max) for data collection
 %
 % Deadline miss: the late QP solution is not applied. The controller applies the
-% next input of its last successful plan (shifted plan, standard in real-time
-% MPC); if that plan is exhausted, the hover-LQR law u_ref - K e is used.
+% next input of its last successful plan (shifted plan); if that plan is
+% exhausted, the hover-LQR law u_ref - K e is used.
 % The applied rotor thrusts are always clipped to [T_min, T_max].
 %
 % mem (in/out): .plan (4 x Np absolute inputs of the last successful plan),
@@ -44,7 +44,7 @@ switch lower(mode)
                 if strcmpi(mode, 'proposed')
                     t_hat = tiny_ml_predictor(CAND_N(iN), CAND_I(iI), cpu_load, pos_err_norm, vel_err_norm);   % calibrated upper bound
                 else
-                    t_hat = qp_latency_model(CAND_N(iN), nx, nu, 14 * CAND_N(iN) + 2, CAND_I(iI), cpu_load, 1.0);
+                    t_hat = qp_latency_model(CAND_N(iN), nx, nu, 14 * CAND_N(iN) + 1, CAND_I(iI), cpu_load, 1.0);
                 end
                 if t_hat <= T_budget_ms
                     N_sel = CAND_N(iN); iter_sel = CAND_I(iI); found = true; break;
@@ -60,7 +60,7 @@ switch lower(mode)
         N_sel = str2double(tok{1}); iter_sel = str2double(tok{2});
 end
 
-qp = build_condensed_qp_ltv(trj, k, N_sel, e0, Q, R, P_term, p.w_max, p.tilt_max);
+qp = build_condensed_qp_ltv(trj, k, N_sel, e0, Q, R, P_term, p.w_max);
 [z, t_calc_ms, actual_iters, is_converged] = measure_qp_latency(qp, iter_sel, cpu_load);
 deadline_missed = (t_calc_ms > T_budget_ms);
 

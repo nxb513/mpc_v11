@@ -3,7 +3,7 @@ function lc = learning_curve()
 %
 % (a) Sample-size curve: the MLP is trained on random subsets of the training
 %     rollouts' samples (n = 25 ... all), R repeats per size (different subset
-%     and initialisation), and evaluated on the fixed held-out TEST rollouts.
+%     and initialisation), and evaluated on the fixed held-out test rollouts.
 %     The same subsets are used to fit the black-box linear baseline.
 % (b) Epoch curve: train / validation Huber loss of the full-data model vs epoch.
 %

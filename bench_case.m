@@ -1,6 +1,6 @@
 function out = bench_case(id, out_dir, n_seeds)
-% BENCH_CASE Runs ONE benchmark case of experiment_config.m: all controllers on
-% cfg.n_seeds independent realisations of the disturbance and CPU load (the SAME
+% BENCH_CASE Runs one benchmark case of experiment_config.m: all controllers on
+% cfg.n_seeds independent realisations of the disturbance and CPU load (the same
 % realisations for every controller, so results are paired). Saves
 % results/bench_case_<id>.mat. Needs trained_predictor.mat (Tiny-ML).
 % Independent of every other case, so the cases run as parallel CI jobs.
@@ -15,11 +15,11 @@ p = quad_params();
 [Q, R] = mpc_weights(cs.weights, p);
 
 Ts = 1 / cs.freq; T_bud = 1000 * Ts; M = round(cfg.T_sim / Ts) + 1;
-[Ad, Bd] = quadrotor_model(Ts, 1.0);
+[Ad, Bd] = quadrotor_model(Ts);
 [K_lqr, P_term] = lqr_controller(Ad, Bd, Q, R);
 traj = cfg.trajectories{cs.traj};
 S = scenario_levels(traj);
-[xr, ur, st] = generate_trajectories(traj, Ts, cfg.T_sim + cfg.preview_pad * Ts, S(cs.level).aggr, false);
+[xr, ur, st] = generate_trajectories(traj, Ts, cfg.T_sim + cfg.preview_pad * Ts, S(cs.level).aggr);
 trj = ltv_model(xr, ur, Ts, p);
 
 fprintf('Case %d (part %s): %s, %s, %d Hz, CPU %.0f%%, disturbance %.1f m/s^2, %s weights, %d seeds\n', ...

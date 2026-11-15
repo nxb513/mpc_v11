@@ -1,10 +1,8 @@
 function plot_architecture()
-% PLOT_ARCHITECTURE Publication-style diagram of the deployed Tiny-ML latency
-% predictor (read from trained_predictor.mat), in the usual fully-connected
-% network style of journal papers: representative neurons per layer with a
-% vertical ellipsis and unit count for wide layers, tinted layer panels, layer
-% captions underneath, pre-processing (z-score) and post-processing (exp) blocks.
-% Exports Fig_6.pdf (IEEE double-column width, 7.16 in).
+% PLOT_ARCHITECTURE Diagram of the deployed Tiny-ML latency predictor (read from
+% trained_predictor.mat): representative neurons per layer, a vertical ellipsis
+% and unit count for wide layers, layer captions, and the pre-processing (z-score)
+% and post-processing (exp) blocks. Exports Fig_6.pdf (width 7.16 in).
 
 s = load('trained_predictor.mat');
 mdl = s.model;

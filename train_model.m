@@ -1,6 +1,6 @@
 function train_model()
 % TRAIN_MODEL Trains the deployed Tiny-ML latency predictor (black-box) and
-% compares it on a held-out TEST set (unseen rollouts) with a black-box linear
+% compares it on a held-out test set (unseen rollouts) with a black-box linear
 % regression. The latency formula is hidden from both.
 
 if ~isfile('mpc_large_dataset.mat')
@@ -32,8 +32,8 @@ end
 
 % Upper-bound predictor for deadline checks: same architecture, log target,
 % pinball loss at the 0.95 quantile. A split-conformal factor computed on the
-% VALIDATION rollouts (95th percentile of true / predicted upper bound) makes the
-% coverage hold on held-out data; coverage on the TEST rollouts is reported.
+% validation rollouts (95th percentile of true / predicted upper bound) makes the
+% coverage hold on held-out data; coverage on the test rollouts is reported.
 TAU = 0.95;
 qopts = struct('hidden', a.arch.hidden, 'log_target', true, 'quantile', TAU, 'seed', 43);
 model_q = train_mlp(X(i_tr, :), Y(i_tr), X(i_va, :), Y(i_va), qopts);

@@ -1,6 +1,6 @@
 function [model, hist] = train_mlp(X_tr, Y_tr, X_va, Y_va, opts)
 % TRAIN_MLP Black-box regression of QP latency with a fully connected ReLU MLP.
-% The learner sees ONLY input/target pairs (X, Y); it has no access to the
+% The learner sees only input/target pairs (X, Y); it has no access to the
 % latency generator or its formula.
 %
 % Architecture: in -> hidden(1) -> ... -> hidden(L) -> 1, ReLU on hidden layers,
@@ -9,7 +9,7 @@ function [model, hist] = train_mlp(X_tr, Y_tr, X_va, Y_va, opts)
 % Training: Huber (Smooth-L1) loss on the fitted target, Adam, L2 weight decay,
 % mini-batches, early stopping on the validation MAE in ms (best weights restored).
 %
-% QUANTILE MODE: opts.quantile = tau (e.g. 0.95) replaces the Huber loss by the
+% quantile mode: opts.quantile = tau (e.g. 0.95) replaces the Huber loss by the
 % pinball loss, so the network predicts the tau-quantile of the latency (an upper
 % bound for deadline checks); early stopping then uses the validation pinball loss.
 %

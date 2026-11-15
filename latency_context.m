@@ -1,5 +1,5 @@
 function ctx = latency_context(new_ctx)
-% LATENCY_CONTEXT Get / set the HIDDEN parameters of the latency generator.
+% LATENCY_CONTEXT Get / set the hidden parameters of the latency generator.
 % The generator (true_latency.m) represents the real on-board timing, whose
 % parameters are unknown to the predictor and change between flight contexts
 % (other SoC, OS overhead, other contention behaviour, timing jitter).

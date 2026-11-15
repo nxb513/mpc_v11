@@ -1,6 +1,6 @@
 function [cpu_load, a_dist] = simulate_workload(M, Ts, seed, cpu_mean, dist_std)
-% SIMULATE_WORKLOAD Background CPU load and external disturbance, both treated as
-% EXPERIMENT AXES (swept in main_simulation.m), not as claims about a real system.
+% SIMULATE_WORKLOAD Background CPU load and external disturbance. Both are
+% experiment axes swept in experiment_config.m.
 %
 %   cpu_load(k) : background CPU utilisation of the flight computer's core,
 %                 cpu_mean + first-order Gauss-Markov fluctuation
@@ -8,9 +8,9 @@ function [cpu_load, a_dist] = simulate_workload(M, Ts, seed, cpu_mean, dist_std)
 %   a_dist(:,k) : external acceleration disturbance in the world frame [m/s^2],
 %                 3 independent first-order Gauss-Markov processes with
 %                 stationary std dist_std and correlation time 1 s.
-% (The Standard Quad of [S2] Table I has no drag coefficient, so a wind
-% VELOCITY model such as Dryden cannot be mapped to a force; the disturbance is
-% therefore modelled directly as an acceleration.)
+% The Standard Quad of [S2] Table I has no drag coefficient, so a wind-velocity
+% model cannot be mapped to a force; the disturbance is modelled directly as an
+% acceleration.
 % The two processes use independent random streams.
 
 if nargin < 4 || isempty(cpu_mean), cpu_mean = 0.5; end

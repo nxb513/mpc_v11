@@ -1,5 +1,5 @@
 function [i_tr, i_va, i_te] = split_by_group(G, fr_tr, fr_va, seed)
-% SPLIT_BY_GROUP Train/validation/test split by ROLLOUT id: all samples of one
+% SPLIT_BY_GROUP Train/validation/test split by rollout id: all samples of one
 % closed-loop rollout go to the same subset, so correlated consecutive samples
 % cannot leak from training into validation/test.
 rng(seed);

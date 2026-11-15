@@ -3,8 +3,8 @@ function xdot = quad_nl_dynamics(x, f_rotor, p, a_ext)
 % with Z-Y-X Euler angles.
 %   x       = [pos(3); vel(3); phi; theta; psi; omega_body(3)]
 %   f_rotor = rotor thrusts [N] (already saturated to [T_min, T_max])
-%   p       = quad_params() (optionally perturbed m, J)
-%   a_ext   = external acceleration in the world frame (wind gust), 3x1
+%   p       = quad_params()
+%   a_ext   = external acceleration disturbance in the world frame, 3x1
 %
 %   v_dot     = R(eta) * [0; 0; T] / m - [0; 0; g] - d_drag * v + a_ext
 %   eta_dot   = W(phi, theta) * omega

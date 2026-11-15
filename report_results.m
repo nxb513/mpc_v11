@@ -4,9 +4,9 @@ function report_results(in_dir)
 % Fig_3, Fig_8, Fig_9.
 %
 % Statistics (no toolbox needed):
-%   * RMSE: mean over the NON-crashed seeds with a 95 % bootstrap percentile CI
+%   * RMSE: mean over the non-crashed seeds with a 95 % bootstrap percentile CI
 %     (10 000 resamples, fixed seed). Crashes are reported as counts.
-%   * Paired comparison of Proposed with each baseline on the SAME seeds where
+%   * Paired comparison of Proposed with each baseline on the same seeds where
 %     neither crashed: mean relative RMSE difference (Proposed - baseline) /
 %     baseline, with a 95 % bootstrap CI, and the share of seeds won by Proposed.
 %     A case counts as "better" / "worse" when the CI excludes 0.

@@ -1,14 +1,12 @@
-function out = run_episode(mode, trj, M, cpu_load, a_dist, Q, R, P_term, K_lqr, T_budget_ms, p_true)
-% RUN_EPISODE Closed-loop simulation of one controller on the NONLINEAR plant.
+function out = run_episode(mode, trj, M, cpu_load, a_dist, Q, R, P_term, K_lqr, T_budget_ms)
+% RUN_EPISODE Closed-loop simulation of one controller on the nonlinear plant.
 %   trj    : ltv_model of the (padded) reference
 %   M      : number of evaluated samples (control steps k = 1..M-1)
 %   a_dist : 3 x M external acceleration disturbance (simulate_workload.m)
-%   p_true : plant parameters (default: nominal quad_params)
 % Tracking error is evaluated at t_{k+1} against x_ref(t_{k+1}). A run is
-% declared CRASHED if the position error exceeds 5 m (half the arena) or the
+% declared crashed if the position error exceeds 5 m (half the arena) or the
 % state is not finite; the simulation then stops and the RMSE is NaN.
 
-if nargin < 11, p_true = trj.p; end
 p = trj.p;
 x = trj.x_ref(:, 1);
 mem = [];
@@ -19,7 +17,7 @@ for k = 1:M-1
     if any(f < p.T_min - 1e-9) || any(f > p.T_max + 1e-9)
         error('run_episode:actuator', 'Rotor thrust %s N outside [%g, %g] N', mat2str(f', 4), p.T_min, p.T_max);
     end
-    x = quad_nl_step(x, f, trj.Ts, p_true, a_dist(:, k));
+    x = quad_nl_step(x, f, trj.Ts, p, a_dist(:, k));
     e = norm(x(1:3) - trj.x_ref(1:3, k+1));
     if ~all(isfinite(x)) || e > 5
         crashed = true; break;

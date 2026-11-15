@@ -1,6 +1,6 @@
 function arch = architecture_search()
-% ARCHITECTURE_SEARCH Transparent, self-proposed selection of the Tiny-ML
-% architecture. Uses ONLY the training and validation rollouts (never the test set).
+% ARCHITECTURE_SEARCH Selection of the Tiny-ML architecture by a fixed rule.
+% Uses only the training and validation rollouts (never the test set).
 %
 % Candidate space (fully connected ReLU MLPs, widths halving with depth):
 %   depth 1: [8], [16], [32], [64]
@@ -9,11 +9,9 @@ function arch = architecture_search()
 %   target : latency y (ms)  or  log(y)
 % Each candidate is trained with SEEDS different initialisations.
 %
-% SELECTION RULE (proposed in this work): among all candidates whose mean
-% validation MAE is within TOL of the best mean validation MAE, choose the one
-% with the FEWEST parameters (ties: fewer flops). This favours the smallest
-% network that is statistically as accurate as the best one, which is the
-% relevant criterion for an on-board (Tiny-ML) predictor.
+% Selection rule: among all candidates whose mean validation MAE is within TOL
+% of the best mean validation MAE, choose the one with the fewest parameters
+% (ties: fewer flops).
 
 TOL = 0.05;
 SEEDS = 3;

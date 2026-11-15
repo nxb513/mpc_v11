@@ -1,7 +1,7 @@
-function [x_ref, u_ref, stats] = generate_trajectories(traj_type, Ts, T_sim, aggr, check)
-% GENERATE_TRAJECTORIES Smooth 3D reference trajectories and the matching
-% state / input references of the NONLINEAR quadrotor (quad_nl_dynamics.m),
-% obtained by differential flatness (yaw fixed to zero).
+function [x_ref, u_ref, stats] = generate_trajectories(traj_type, Ts, T_sim, aggr)
+% GENERATE_TRAJECTORIES Smooth 3D reference trajectories and the matching state /
+% input references of the nonlinear quadrotor (quad_nl_dynamics.m), obtained by
+% differential flatness (yaw fixed to zero).
 %
 %   aggr : aggressiveness level (default 1). It scales the angular frequency of
 %          the trajectory, so speed scales with aggr and acceleration with aggr^2.
@@ -11,41 +11,24 @@ function [x_ref, u_ref, stats] = generate_trajectories(traj_type, Ts, T_sim, agg
 %   phi = -asin(z_b,y),  theta = atan2(z_b,x, z_b,z)
 %   omega from the derivative of z_b (uses jerk), tau = J omega_dot + omega x J omega
 %   (omega_dot by central differences of the analytic omega(t), h = 1e-4 s).
-% u_ref = [T - m g; tau] (thrust deviation from nominal hover, body torques).
-%
-% check (default true): error if tilt > 60 deg or the feed-forward rotor thrusts
-% do not keep >= 25 % of the hover-to-limit headroom (quad_params.m). With
-% check = false the reference may demand MORE than the actuators can give
-% (limit-pushing scenarios); stats.ff_over reports by how much.
+% u_ref = [T - m g; tau] (thrust deviation from hover, body torques).
+% The reference may demand more than the rotors can give; stats.ff_over is the
+% share of samples (%) whose feed-forward rotor thrusts leave [T_min, T_max].
 
 if nargin < 4 || isempty(aggr), aggr = 1.0; end
-if nargin < 5 || isempty(check), check = true; end
 p = quad_params();
 t = 0:Ts:T_sim;
 
 [x_ref, u_ref, aux] = flat_reference(traj_type, t, aggr, p);
 
-% ---- feasibility checks -----------------------------------------------------
 tilt = acos(min(1, aux.zb(3, :)));
-if check && max(tilt) > deg2rad(60)
-    error('generate_trajectories:tilt', '%s (aggr %.2f): reference tilt %.1f deg exceeds 60 deg', ...
-        traj_type, aggr, rad2deg(max(tilt)));
-end
 f_ff = p.Mix_inv * (u_ref + p.u_hover);
-f_h = p.f_hover(1);
-f_lo = p.T_min + 0.25 * (f_h - p.T_min);
-f_hi = p.T_max - 0.25 * (p.T_max - f_h);
-if check && (any(f_ff(:) < f_lo) || any(f_ff(:) > f_hi))
-    error('generate_trajectories:thrust', '%s (aggr %.2f): feed-forward rotor thrust [%.2f, %.2f] N leaves [%.2f, %.2f] N', ...
-        traj_type, aggr, min(f_ff(:)), max(f_ff(:)), f_lo, f_hi);
-end
-
 speeds = sqrt(sum(x_ref(4:6, :).^2, 1));
 stats.min = min(speeds); stats.max = max(speeds); stats.mean = mean(speeds);
 stats.tilt_max_deg = rad2deg(max(tilt));
 stats.f_ff_range = [min(f_ff(:)), max(f_ff(:))];
 stats.rate_max = max(max(abs(x_ref(10:12, :))));
-stats.ff_over = 100 * mean(any(f_ff > p.T_max | f_ff < p.T_min, 1));   % % of samples beyond actuator limits
+stats.ff_over = 100 * mean(any(f_ff > p.T_max | f_ff < p.T_min, 1));
 end
 
 % =============================================================================
@@ -88,8 +71,7 @@ function P = position_derivatives(traj_type, t, aggr)
 % P(:, :, n+1) = n-th time derivative of the position, n = 0..4 (analytic).
 % Shapes are sized to an indoor flight arena of about 10 m x 10 m x 5 m
 % (|x|, |y| <= 4.5 m, 0.5 m <= z <= 4.5 m). Base angular frequencies give
-% about 2 m/s peak speed at aggr = 1; difficulty is set by aggr
-% (scenario_levels.m), not by the size.
+% about 2 m/s peak speed at aggr = 1; difficulty is set by aggr (scenario_levels.m).
 M = numel(t);
 sdn = @(w, n) w^n * sin(w * t + n * pi / 2);
 cdn = @(w, n) w^n * cos(w * t + n * pi / 2);

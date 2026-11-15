@@ -1,7 +1,7 @@
 function cal = latency_calibration()
 % LATENCY_CALIBRATION Calibrates the FLOP-based QP latency model against a
-% published embedded benchmark. EVERY number below is either (a) copied from the
-% cited source, (b) derived from it, or (c) an explicit modelling ASSUMPTION.
+% published embedded benchmark. Each number below is (a) taken from the cited
+% source, (b) derived from it, or (c) a stated modelling assumption.
 %
 % Source [S1]: J. Frey, S. Di Cairano, R. Quirynen, "Active-Set based Inexact
 %   Interior Point QP Solver for Model Predictive Control", IFAC World Congress
@@ -10,11 +10,10 @@ function cal = latency_calibration()
 %   Ts = 50 ms, N = 50, nx = 4, nu = 2 (force + slack), 4 soft state
 %   constraints per stage (eq. 13a-b).
 %
-% Model (per QP solve, all quantities in flops / ms):
-%   t = (F_setup + iters * F_iter) / R_eff
-%   F_iter(n, m) = c_iter * n^2 + 2 * n * m          (dense active-set iteration)
-%   F_setup      = 2 * n * nx * (N + 1) + 2 * N * nx * (nx + nu)   (gradient + affine term)
-% with n = N*nu condensed variables and m general inequality rows.
+% Per-iteration cost of a dense active-set solver (flops):
+%   F_iter(n, m) = c_iter * n^2 + 2 * n * m
+% with n decision variables and m general inequality rows. The per-step setup
+% cost of the LTV-MPC is counted in qp_latency_model.m / true_latency.m.
 %
 % R_eff (effective flop rate of the embedded CPU running an active-set solver)
 % is fitted from the slope of time vs. iterations in [S1, Table 2].
@@ -33,7 +32,7 @@ ab = Xf \ cal.src.time_mean(:);
 cal.fit.a_ms        = ab(1);   % intercept: per-solve overhead of [S1] (not transferred, see below)
 cal.fit.b_ms_per_it = ab(2);   % slope: time per active-set iteration
 
-% ---- (c) ASSUMPTIONS --------------------------------------------------------
+% ---- (c) assumptions --------------------------------------------------------
 % A1: [S1] used qpOASES on the condensed (dense) QP: n = N*nu variables,
 %     m = 4*N general inequality rows (input/slack bounds are simple bounds).
 % A2: c_iter = 4: per iteration, ~2 n^2 for the step (two triangular solves with
@@ -42,8 +41,8 @@ cal.fit.b_ms_per_it = ab(2);   % slope: time per active-set iteration
 %     The ratio-test term 2*n*m covers products with the constraint matrix.
 % A3: Iteration counts of MATLAB quadprog('active-set') are used as a proxy for
 %     the iteration counts of an embedded active-set solver.
-% A4: The intercept a of [S1] (condensing/initialisation of a larger problem) is
-%     NOT transferred; our per-solve overhead is F_setup / R_eff only.
+% A4: The intercept a of [S1] (condensing / initialisation of a larger problem)
+%     is not transferred; the per-step overhead is F_setup / R_eff only.
 cal.c_iter = 4;
 
 n_src = cal.src.N * cal.src.nu;
@@ -51,5 +50,4 @@ m_src = cal.src.m_per_stage * cal.src.N;
 cal.src.F_iter = cal.c_iter * n_src^2 + 2 * n_src * m_src;
 cal.R_eff_flops_per_ms = cal.src.F_iter / cal.fit.b_ms_per_it;  % Cortex-A7 @ 900 MHz
 
-% Single hardware profile: the calibrated Cortex-A7 platform of [S1] (factor 1).
 end
