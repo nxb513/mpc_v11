@@ -9,8 +9,10 @@ cfg.preview_pad = 20;           % >= largest candidate horizon (16)
 cfg.freq0 = 50;                 % nominal control rate [Hz] (middle of the 20-100 Hz sweep)
 cfg.cpu0 = 0.5;                 % nominal mean background CPU load
 cfg.dist0 = 0.5;                % nominal disturbance std [m/s^2]
-cfg.controllers = {'fixed_4', 'fixed_10', 'anytime', 'max_feasible', 'proposed'};
-cfg.labels = {'Fixed-MPC (N=4)', 'Fixed-MPC (N=10)', 'Anytime MPC (N=10)', 'Max-feasible N (Tiny-ML)', 'Proposed'};
+cfg.controllers = {'fixed_5', 'fixed_10', 'nominal_max', 'proposed'};
+cfg.labels = {'Fixed-MPC (N=5)', 'Fixed-MPC (N=10)', 'Nominal-model scheduler', 'Proposed (Tiny-ML scheduler)'};
+cfg.n_seeds = 20;               % independent disturbance / CPU-load realisations per case
+cfg.seed_stride = 1000;         % seed of repetition r = case seed + (r-1) * seed_stride
 cfg.trajectories = {'lemniscate', 'helix', 'racing'};
 cfg.levels = {'S1 nominal', 'S2 at limit', 'S3 beyond 10%', 'S4 beyond 30%'};
 cfg.freqs = [20, 40, 60, 80, 100];

@@ -1,12 +1,15 @@
-function out = bench_case(id, out_dir)
-% BENCH_CASE Runs ONE benchmark case of experiment_config.m (all controllers) and
-% saves results/bench_case_<id>.mat. Needs trained_predictor.mat (Tiny-ML).
+function out = bench_case(id, out_dir, n_seeds)
+% BENCH_CASE Runs ONE benchmark case of experiment_config.m: all controllers on
+% cfg.n_seeds independent realisations of the disturbance and CPU load (the SAME
+% realisations for every controller, so results are paired). Saves
+% results/bench_case_<id>.mat. Needs trained_predictor.mat (Tiny-ML).
 % Independent of every other case, so the cases run as parallel CI jobs.
 
-if nargin < 2, out_dir = 'results'; end
+if nargin < 2 || isempty(out_dir), out_dir = 'results'; end
 if ischar(id) || isstring(id), id = str2double(id); end
 if ~isfolder(out_dir), mkdir(out_dir); end
 cfg = experiment_config();
+if nargin < 3 || isempty(n_seeds), n_seeds = cfg.n_seeds; end
 cs = cfg.cases(id);
 p = quad_params();
 [Q, R] = mpc_weights(cs.weights, p);
@@ -18,31 +21,42 @@ traj = cfg.trajectories{cs.traj};
 S = scenario_levels(traj);
 [xr, ur, st] = generate_trajectories(traj, Ts, cfg.T_sim + cfg.preview_pad * Ts, S(cs.level).aggr, false);
 trj = ltv_model(xr, ur, Ts, p);
-[cpu, ad] = simulate_workload(M, Ts, cs.seed, cs.cpu, cs.dist);
 
-fprintf('Case %d (part %d): %s, %s, %d Hz, CPU %.0f%%, disturbance %.1f m/s^2, %s weights\n', ...
-    id, cs.part, traj, cfg.levels{cs.level}, cs.freq, 100 * cs.cpu, cs.dist, cs.weights);
+fprintf('Case %d (part %d): %s, %s, %d Hz, CPU %.0f%%, disturbance %.1f m/s^2, %s weights, %d seeds\n', ...
+    id, cs.part, traj, cfg.levels{cs.level}, cs.freq, 100 * cs.cpu, cs.dist, cs.weights, n_seeds);
 fprintf('  reference: speed max %.1f m/s, tilt max %.0f deg, beyond rotor limits %.1f%% of the time\n', ...
     st.max, st.tilt_max_deg, st.ff_over);
-fprintf('  %-26s | %8s | %8s | %10s | %6s | %8s | %8s\n', 'Controller', 'RMSE (m)', 'Miss (%)', 'CPU (ms/s)', 'mean N', 'shift %', 'LQR %');
 
 nC = numel(cfg.controllers);
-r = struct('rmse', nan(1, nC), 'crash', false(1, nC), 'miss', nan(1, nC), 'cpu_ms_per_s', nan(1, nC), ...
-    'N_mean', nan(1, nC), 'shift', nan(1, nC), 'lqr', nan(1, nC));
+z = nan(n_seeds, nC);
+r = struct('rmse', z, 'crash', false(n_seeds, nC), 'miss', z, 'cpu_ms_per_s', z, 'N_mean', z, ...
+    'shift', z, 'lqr', z, 'seeds', cs.seed + (0:n_seeds-1)' * cfg.seed_stride);
 traces = cell(1, nC);
-for c = 1:nC
-    o = run_episode(cfg.controllers{c}, trj, M, cpu, ad, Q, R, P_term, K_lqr, T_bud);
-    r.rmse(c) = o.rmse; r.crash(c) = o.crashed; r.miss(c) = o.miss; r.cpu_ms_per_s(c) = o.cpu_ms_per_s;
-    r.N_mean(c) = o.N_mean; r.shift(c) = o.fallback_shift; r.lqr(c) = o.fallback_lqr;
-    traces{c} = struct('lat', o.lat, 'N', o.Nsel, 'n_done', o.n_done);
-    if o.crashed, rs = '   CRASH'; else, rs = sprintf('%8.4f', o.rmse); end
-    fprintf('  %-26s | %s | %8.2f | %10.1f | %6.2f | %8.2f | %8.2f\n', cfg.labels{c}, rs, o.miss, ...
-        o.cpu_ms_per_s, o.N_mean, o.fallback_shift, o.fallback_lqr);
+for sd = 1:n_seeds
+    [cpu, ad] = simulate_workload(M, Ts, r.seeds(sd), cs.cpu, cs.dist);
+    for c = 1:nC
+        o = run_episode(cfg.controllers{c}, trj, M, cpu, ad, Q, R, P_term, K_lqr, T_bud);
+        r.rmse(sd, c) = o.rmse; r.crash(sd, c) = o.crashed; r.miss(sd, c) = o.miss;
+        r.cpu_ms_per_s(sd, c) = o.cpu_ms_per_s; r.N_mean(sd, c) = o.N_mean;
+        r.shift(sd, c) = o.fallback_shift; r.lqr(sd, c) = o.fallback_lqr;
+        if sd == 1
+            traces{c} = struct('lat', o.lat, 'N', o.Nsel, 'n_done', o.n_done, 'cpu', cpu(1:M-1));
+        end
+    end
 end
+
+fprintf('  %-30s | %-18s | %7s | %8s | %10s | %6s\n', 'Controller', 'RMSE (m) mean+-sd', 'crashes', 'miss (%)', 'CPU (ms/s)', 'mean N');
+for c = 1:nC
+    ok = ~r.crash(:, c);
+    fprintf('  %-30s | %8.4f +- %6.4f | %4d/%-2d | %8.2f | %10.1f | %6.2f\n', cfg.labels{c}, ...
+        mean(r.rmse(ok, c)), std(r.rmse(ok, c)), sum(~ok), n_seeds, mean(r.miss(:, c)), ...
+        mean(r.cpu_ms_per_s(:, c)), mean(r.N_mean(:, c)));
+end
+
 kk = 1:M-1;
 ff = p.Mix_inv * (trj.u_ref(:, kk) + p.u_hover);
 out.case = cs; out.id = id; out.res = r; out.ref_stats = st;
-out.traces = traces; out.t = (0:M-2) * Ts; out.cpu = cpu(1:M-1); out.budget = T_bud;
+out.traces = traces; out.t = (0:M-2) * Ts; out.budget = T_bud;
 out.ref_over = any(ff > p.T_max | ff < p.T_min, 1);
 save(fullfile(out_dir, sprintf('bench_case_%02d.mat', id)), 'out');
 end

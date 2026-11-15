@@ -23,14 +23,14 @@ Results of earlier versions are archived in `_rac/` (not tracked by git) and mus
 
 ## Controllers compared (`adaptive_mpc_solver.m`)
 
-| Controller | Horizon choice |
+| Controller | Horizon choice at every step |
 |---|---|
-| Fixed N = 4 | always 4 (cheapest) |
+| Fixed N = 5 | always 5 |
 | Fixed N = 10 | always 10 |
-| Anytime | N = 10, iteration cap cut to fit the budget using the nominal latency model |
-| Max-feasible N | the largest N that the Tiny-ML predictor says fits the budget, at every step (ablation without lookahead) |
-| **Proposed** | If the reference demands rotor thrust outside [T_min, T_max] within the next 16 steps, use the largest N that fits the budget (Tiny-ML × data-driven safety factor). Otherwise use the smallest N |
+| Nominal-model scheduler | the largest (N, I_max) whose latency from the **nominal formula** (calibration known before flight, worst-case iterations) fits the budget |
+| **Proposed (Tiny-ML scheduler)** | the largest (N, I_max) whose latency **predicted by the Tiny-ML model** (learned from logged data, formula unknown), times its data-driven safety factor, fits the budget |
 
+Candidate horizons are N ∈ {4, 6, 8, 10, 12, 16} and iteration caps I_max ∈ {10, 20, 40}.
 All controllers share the same weights, constraints and fallback.
 
 ## Tiny-ML latency predictor
@@ -51,7 +51,9 @@ All controllers share the same weights, constraints and fallback.
 4. **Loose Bryson weights** at S3 (sensitivity check).
 5. **Tiny-ML study** on 8 hidden latency formulas (`Fig_7.pdf`).
 
-Metrics: position RMSE, crashes (position error above 5 m), deadline-miss rate, solver time per second of flight, mean selected N, and fallback use.
+Every case is run on **20 independent disturbance and CPU-load realisations (seeds)**. All controllers use the same realisations, so the comparisons are paired.
+
+Metrics: position RMSE (mean with a 95 % bootstrap CI over the non-crashed seeds), crashes (position error above 5 m), deadline-miss rate, solver time per second of flight, and mean selected N. Proposed is compared with each baseline on the same seeds: mean difference with a 95 % bootstrap CI, and the share of seeds won.
 
 ## Known limitations
 

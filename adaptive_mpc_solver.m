@@ -3,17 +3,15 @@ function [f_rotor, info, mem] = adaptive_mpc_solver(mode, x_curr, k, trj, Q, R, 
 % Cortex-A7 platform. trj = ltv_model(...) of the reference; k = time index.
 %
 % Controllers (all share Q, R, P_term, constraints and fallback):
-%   'fixed_4', 'fixed_10' : fixed horizon, iteration cap 40
-%   'anytime'             : N = 10, iteration cap cut to fit the budget using the
-%                           NOMINAL latency model (qp_latency_model.m)
-%   'max_feasible'        : largest N (and I_max) that the Tiny-ML predictor says
-%                           fits the budget, every step (ablation: no lookahead)
-%   'proposed'            : actuator-limit lookahead + Tiny-ML:
-%                             if the reference demands rotor thrust outside
-%                             [T_min, T_max] anywhere in the next N_LOOK steps,
-%                             use the largest N that fits the budget (Tiny-ML,
-%                             with its data-driven safety factor);
-%                             otherwise use the smallest N.
+%   'fixed_5', 'fixed_10' : fixed horizon, iteration cap 40
+%   'nominal_max'         : largest (N, I_max) whose latency from the NOMINAL
+%                           formula (qp_latency_model.m, the calibration believed
+%                           before flight, with I_max iterations as worst case)
+%                           fits the budget, every step
+%   'proposed'            : largest (N, I_max) whose latency predicted by the
+%                           Tiny-ML model (learned from data, formula unknown)
+%                           times its data-driven safety factor fits the budget,
+%                           every step
 %   'dataset_<N>_<I>'     : explicit (N, I_max) for data collection
 %
 % Deadline miss: the late QP solution is not applied. The controller applies the
@@ -28,37 +26,28 @@ p = trj.p;
 nx = 12; nu = 4;
 CAND_N = [4, 6, 8, 10, 12, 16];
 CAND_I = [10, 20, 40];
-N_LOOK = max(CAND_N);
 e0 = x_curr - trj.x_ref(:, k);
 pos_err_norm = norm(e0(1:3));
 vel_err_norm = norm(e0(4:6));
 if nargin < 11 || isempty(mem), mem = struct('plan', [], 'age', 0, 'last_N', CAND_N(1)); end
 
 switch lower(mode)
-    case 'fixed_4'
-        N_sel = 4; iter_sel = 40;
+    case 'fixed_5'
+        N_sel = 5; iter_sel = 40;
     case 'fixed_10'
         N_sel = 10; iter_sel = 40;
-    case 'anytime'
-        N_sel = 10;
-        m_ineq = 14 * N_sel + 2;
-        t0 = qp_latency_model(N_sel, nx, nu, m_ineq, 0, cpu_load, 1.0);
-        t1 = qp_latency_model(N_sel, nx, nu, m_ineq, 1, cpu_load, 1.0) - t0;
-        iter_sel = max(1, min(40, floor((T_budget_ms - t0) / max(1e-9, t1))));
-    case {'max_feasible', 'proposed'}
-        need_long = true;
-        if strcmpi(mode, 'proposed')
-            kk = k:min(k + N_LOOK - 1, size(trj.u_ref, 2));
-            f_ff = p.Mix_inv * (trj.u_ref(:, kk) + p.u_hover);
-            need_long = any(f_ff(:) > p.T_max | f_ff(:) < p.T_min);
-        end
-        if need_long, order = numel(CAND_N):-1:1; else, order = 1:numel(CAND_N); end
+    case {'nominal_max', 'proposed'}
         N_sel = CAND_N(1); iter_sel = CAND_I(1);
         found = false;
-        for iN = order
+        for iN = numel(CAND_N):-1:1
             for iI = numel(CAND_I):-1:1
-                [t_hat, margin] = tiny_ml_predictor(CAND_N(iN), CAND_I(iI), cpu_load, pos_err_norm, vel_err_norm);
-                if margin * t_hat <= T_budget_ms
+                if strcmpi(mode, 'proposed')
+                    [t_hat, margin] = tiny_ml_predictor(CAND_N(iN), CAND_I(iI), cpu_load, pos_err_norm, vel_err_norm);
+                    t_hat = margin * t_hat;
+                else
+                    t_hat = qp_latency_model(CAND_N(iN), nx, nu, 14 * CAND_N(iN) + 2, CAND_I(iI), cpu_load, 1.0);
+                end
+                if t_hat <= T_budget_ms
                     N_sel = CAND_N(iN); iter_sel = CAND_I(iI); found = true; break;
                 end
             end
