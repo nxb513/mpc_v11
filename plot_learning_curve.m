@@ -8,7 +8,8 @@ end
 sizes = lc.sizes; mae = lc.mae; hist = lc.hist;
 
 f4 = paper_figure(84, 62); hold on;
-cols = [0.15 0.68 0.38; 0.45 0.45 0.45];
+st = paper_palette();
+cols = [st.color(4, :); 0.45 0.45 0.45];
 mk = {'-o', '--s'};
 lab = {'Tiny-ML MLP', 'Linear regression'};
 h = gobjects(2, 1);

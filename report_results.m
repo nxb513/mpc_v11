@@ -85,24 +85,43 @@ for pt = 'BC'
 end
 
 % ---- Figures ----------------------------------------------------------------------------
-colors = [0.25 0.55 0.85; 0.85 0.35 0.25; 0.50 0.35 0.70; 0.15 0.68 0.38];
-markers = {'o', 's', 'd', 'p'};
+st = paper_palette();
+lvl_short = arrayfun(@(s) sprintf('S%d', s), 1:nL, 'UniformOutput', false);
+lab_short = {'Fixed N = 5', 'Fixed N = 10', 'Nominal scheduler', 'Tiny-ML scheduler'};
 isA0 = @(o) o.case.part == 'A' && o.case.freq == cfg.freq0 && o.case.cpu == cfg.cpu0;
 
-% Fig 1: scheduler trace, lemniscate, S4, 50 Hz, CPU 50 %, first seed
+% Fig 1: scheduler trace (single column): lemniscate, S4, 50 Hz, CPU 50 %, first seed.
+% Grey bands mark the samples where the reference demands rotor thrust beyond the limits.
 id1 = find(cellfun(@(o) isA0(o) && o.case.traj == 1 && o.case.level == 4, B), 1);
-o = B{id1}; tr = o.traces{iP}; n = tr.n_done; t = o.t(1:n);
-f1 = paper_figure(174, 110);
-tl = tiledlayout(f1, 3, 1, 'TileSpacing', 'compact');
-ax = nexttile(tl); plot(ax, t, 100 * tr.cpu(1:n), 'k-', 'LineWidth', 0.8); ylabel(ax, 'CPU load (%)'); grid(ax, 'on');
-ax = nexttile(tl); hold(ax, 'on'); plot(ax, t, tr.lat(1:n), 'b-', 'LineWidth', 1.0);
-yline(ax, o.budget, 'r--', sprintf('Budget %.0f ms', o.budget), 'LineWidth', 1.3); ylabel(ax, 'Solve latency (ms)'); grid(ax, 'on');
-ax = nexttile(tl); stairs(ax, t, tr.N(1:n), 'Color', colors(iP, :), 'LineWidth', 1.2);
-ylabel(ax, 'Selected N'); xlabel(ax, 'Time (s)'); grid(ax, 'on');
+o = B{id1}; tr = o.traces{iP}; n = tr.n_done; t = o.t(1:n); over = o.ref_over(1:n);
+f1 = paper_figure(84, 95);
+tl = tiledlayout(f1, 3, 1, 'TileSpacing', 'compact', 'Padding', 'compact');
+ax = gobjects(3, 1);
+data = {100 * tr.cpu(1:n), tr.lat(1:n), tr.N(1:n)};
+ylab = {'CPU load (%)', 'Latency (ms)', 'Horizon N'};
+for a = 1:3
+    ax(a) = nexttile(tl); hold(ax(a), 'on');
+    if a == 3
+        stairs(ax(a), t, data{a}, 'Color', st.color(4, :));
+        ylim(ax(a), [3, 17]); yticks(ax(a), [4 8 12 16]);
+    else
+        plot(ax(a), t, data{a}, 'Color', [0.15 0.15 0.15], 'LineWidth', 0.6);
+    end
+    if a == 2
+        yline(ax(a), o.budget, '--', 'Color', st.color(2, :), 'LineWidth', 1.0);
+    end
+    ylabel(ax(a), ylab{a}); xlim(ax(a), [0, t(end)]);
+    shade_mask(ax(a), t, over);
+    text(ax(a), 0.01, 0.92, sprintf('(%c)', 'a' + a - 1), 'Units', 'normalized', 'VerticalAlignment', 'top');
+    if a < 3, set(ax(a), 'XTickLabel', []); end
+end
+xlabel(ax(3), 'Time (s)');
+linkaxes(ax, 'x');
 
-% Fig 2: RMSE vs level at the nominal rate / load, with 95 % CI
-f2 = paper_figure(174, 70);
-tl = tiledlayout(f2, 1, nT, 'TileSpacing', 'compact');
+% Fig 2: RMSE vs level at the nominal rate / load (double column, three panels)
+f2 = paper_figure(174, 62);
+tl = tiledlayout(f2, 1, nT, 'TileSpacing', 'compact', 'Padding', 'compact');
+h = gobjects(nC, 1);
 for trj = 1:nT
     ax = nexttile(tl); hold(ax, 'on');
     for c = 1:nC
@@ -111,37 +130,43 @@ for trj = 1:nT
             id = find(cellfun(@(o) isA0(o) && o.case.traj == trj && o.case.level == s, B), 1);
             r = B{id}.res; [m(s), lo(s), hi(s)] = boot_mean(r.rmse(~r.crash(:, c), c));
         end
-        x = (1:nL) + (c - (nC + 1) / 2) * 0.08;
-        errorbar(ax, x, m, m - lo, hi - m, ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.3, ...
-            'MarkerFaceColor', colors(c, :), 'CapSize', 3);
+        x = (1:nL) + (c - (nC + 1) / 2) * 0.09;
+        h(c) = errorbar(ax, x, m, m - lo, hi - m, [st.line{c}, st.marker{c}], 'Color', st.color(c, :), ...
+            'MarkerFaceColor', st.color(c, :), 'MarkerSize', 3.5, 'CapSize', 2);
     end
-    set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); grid(ax, 'on');
-    title(ax, sprintf('(%c) %s', 'a' + trj - 1, cfg.trajectories{trj}), 'FontWeight', 'normal'); ylabel(ax, 'Position RMSE (m)');
+    set(ax, 'XTick', 1:nL, 'XTickLabel', lvl_short); xlim(ax, [0.5, nL + 0.5]);
+    xlabel(ax, 'Scenario level');
+    if trj == 1, ylabel(ax, 'Position RMSE (m)'); end
+    text(ax, 0.03, 0.95, sprintf('(%c) %s', 'a' + trj - 1, cfg.trajectories{trj}), 'Units', 'normalized', 'VerticalAlignment', 'top');
 end
-lg = legend(nexttile(tl, 1), cfg.labels, 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
+lg = legend(h, lab_short, 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
 
-% Fig 3: crash rate, deadline misses, solver time vs level (Part A pooled)
-f3 = paper_figure(174, 70);
-tl = tiledlayout(f3, 1, 3, 'TileSpacing', 'compact');
+% Fig 3: crash rate, deadline misses, solver time vs level (Part A pooled; double column)
+f3 = paper_figure(174, 58);
+tl = tiledlayout(f3, 1, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
 CR = nan(nL, nC); MS = CR; CP = CR;
 for s = 1:nL
     ids = find(parts == 'A' & cellfun(@(o) o.case.level == s, B));
     CR(s, :) = 100 * sum(crash(ids, :), 1) / (numel(ids) * nSeed);
     MS(s, :) = mean(miss(ids, :), 1); CP(s, :) = mean(cpu(ids, :), 1);
 end
-ax = nexttile(tl); b = bar(ax, CR); for c = 1:nC, b(c).FaceColor = colors(c, :); end
-set(ax, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Crashed runs (%)'); grid(ax, 'on');
-ax = nexttile(tl); hold(ax, 'on');
-for c = 1:nC, plot(ax, 1:nL, MS(:, c), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4); end
-set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Deadline misses (%)'); grid(ax, 'on');
-ax = nexttile(tl); hold(ax, 'on');
-for c = 1:nC, plot(ax, 1:nL, CP(:, c), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4); end
-set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Solver time per second of flight (ms/s)'); grid(ax, 'on');
-lg = legend(ax, cfg.labels, 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
+vals = {CR, MS, CP};
+yl = {'Crashed runs (%)', 'Deadline misses (%)', 'Solver time (ms per s of flight)'};
+for a = 1:3
+    ax = nexttile(tl); hold(ax, 'on');
+    for c = 1:nC
+        h(c) = plot(ax, 1:nL, vals{a}(:, c), [st.line{c}, st.marker{c}], 'Color', st.color(c, :), ...
+            'MarkerFaceColor', st.color(c, :), 'MarkerSize', 3.5);
+    end
+    set(ax, 'XTick', 1:nL, 'XTickLabel', lvl_short); xlim(ax, [0.5, nL + 0.5]);
+    xlabel(ax, 'Scenario level'); ylabel(ax, yl{a});
+    text(ax, 0.03, 0.95, sprintf('(%c)', 'a' + a - 1), 'Units', 'normalized', 'VerticalAlignment', 'top');
+end
+lg = legend(h, lab_short, 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
 
-% Fig 8: relative RMSE change of Proposed vs Fixed N=5 over rate x CPU load, per level
-f8 = paper_figure(174, 105);
-tl = tiledlayout(f8, 2, 3, 'TileSpacing', 'compact');
+% Fig 8: relative RMSE change of the Tiny-ML scheduler vs Fixed N = 5 over rate x CPU load
+f8 = paper_figure(174, 100);
+tl = tiledlayout(f8, 2, 3, 'TileSpacing', 'compact', 'Padding', 'compact');
 for s = 1:nL
     Hm = nan(numel(cfg.cpu_set), numel(cfg.freqs));
     for i = 1:numel(cfg.cpu_set)
@@ -152,43 +177,54 @@ for s = 1:nL
         end
     end
     ax = nexttile(tl);
-    imagesc(ax, Hm, 'AlphaData', ~isnan(Hm)); set(ax, 'Color', [0.85 0.85 0.85]);
-    caxis(ax, [-40 40]); colormap(ax, local_diverging());
+    imagesc(ax, Hm, 'AlphaData', ~isnan(Hm)); set(ax, 'Color', st.grey, 'XGrid', 'off', 'YGrid', 'off');
+    caxis(ax, [-40 40]); colormap(ax, st.diverging);
     set(ax, 'XTick', 1:numel(cfg.freqs), 'XTickLabel', cfg.freqs, 'YTick', 1:numel(cfg.cpu_set), ...
-        'YTickLabel', 100 * cfg.cpu_set, 'YDir', 'normal');
+        'YTickLabel', 100 * cfg.cpu_set, 'YDir', 'normal', 'TickLength', [0 0]);
     for i = 1:numel(cfg.cpu_set)
         for j = 1:numel(cfg.freqs)
-            if ~isnan(Hm(i, j)), text(ax, j, i, sprintf('%+.0f%%', Hm(i, j)), 'HorizontalAlignment', 'center', 'FontSize', 7); end
+            if ~isnan(Hm(i, j))
+                text(ax, j, i, sprintf('%+.0f', Hm(i, j)), 'HorizontalAlignment', 'center', 'FontSize', 7);
+            end
         end
     end
-    title(ax, sprintf('(%c) %s', 'a' + s - 1, cfg.levels{s}), 'FontWeight', 'normal'); xlabel(ax, 'Control rate (Hz)'); ylabel(ax, 'Mean CPU load (%)');
+    title(ax, sprintf('(%c) %s', 'a' + s - 1, lvl_short{s}));
+    if s > 3, xlabel(ax, 'Control rate (Hz)'); end
+    if mod(s, 3) == 1, ylabel(ax, 'Mean CPU load (%)'); end
 end
 cb = colorbar(ax); cb.Layout.Tile = 'east'; cb.Label.String = 'RMSE change vs Fixed N = 5 (%)';
 
-% Fig 9: Parts B and C, relative change vs Fixed N=5 and vs Nominal per level
-f9 = paper_figure(174, 70);
-tl = tiledlayout(f9, 1, 2, 'TileSpacing', 'compact');
+% Fig 9: Parts B and C, mean relative change per level (double column)
+f9 = paper_figure(174, 60);
+tl = tiledlayout(f9, 1, 2, 'TileSpacing', 'compact', 'Padding', 'compact');
 conds = {@(o) o.case.part == 'B' && o.case.dist == 0, 'disturbance 0'; ...
-         @(o) isA0(o), 'disturbance 0.5 (Part A)'; ...
-         @(o) o.case.part == 'B' && o.case.dist == 1.0, 'disturbance 1.0'; ...
+         @(o) isA0(o), 'disturbance 0.5 m/s^2'; ...
+         @(o) o.case.part == 'B' && o.case.dist == 1.0, 'disturbance 1.0 m/s^2'; ...
          @(o) o.case.part == 'C', 'loose weights'};
-for bb = [1, 3]
-    ax = nexttile(tl); V = nan(nL, size(conds, 1));
+ks = {'-', '--', ':', '-.'}; km = {'o', 's', '^', 'd'};
+ref = [1, 3]; refname = {'Fixed N = 5', 'nominal scheduler'};
+for bb = 1:2
+    ax = nexttile(tl); hold(ax, 'on');
     for k = 1:size(conds, 1)
+        V = nan(nL, 1);
         for s = 1:nL
             ids = find(cellfun(@(o) conds{k, 1}(o) && o.case.level == s, B));
-            V(s, k) = 100 * mean(rel(ids, bb, 1), 'omitnan');
+            V(s) = 100 * mean(rel(ids, ref(bb), 1), 'omitnan');
         end
+        h(k) = plot(ax, 1:nL, V, [ks{k}, km{k}], 'Color', [0.2 0.2 0.2] + 0.15 * (k - 1), 'MarkerSize', 3.5);
     end
-    bar(ax, V); grid(ax, 'on'); set(ax, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30);
-    ylabel(ax, sprintf('RMSE change vs %s (%%)', cfg.labels{bb}));
+    yline(ax, 0, 'k-', 'LineWidth', 0.5, 'HandleVisibility', 'off');
+    set(ax, 'XTick', 1:nL, 'XTickLabel', lvl_short); xlim(ax, [0.5, nL + 0.5]);
+    xlabel(ax, 'Scenario level'); ylabel(ax, sprintf('RMSE change vs %s (%%)', refname{bb}));
+    text(ax, 0.03, 0.95, sprintf('(%c)', 'a' + bb - 1), 'Units', 'normalized', 'VerticalAlignment', 'top');
 end
-lg = legend(ax, conds(:, 2), 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
+lg = legend(h(1:size(conds, 1)), conds(:, 2), 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
 
 figs = {f1, 'Fig_1'; f2, 'Fig_2'; f3, 'Fig_3'; f8, 'Fig_8'; f9, 'Fig_9'};
 for i = 1:size(figs, 1)
     export_figure(figs{i, 1}, figs{i, 2});
 end
+
 save('benchmark_results.mat', 'B', 'cfg', 'rel', 'win', 'crash', 'rm', 'miss', 'cpu');
 end
 
@@ -211,9 +247,17 @@ x = (r.rmse(ok, a) - r.rmse(ok, b)) ./ r.rmse(ok, b);
 w = 100 * mean(x < 0);
 end
 
-function cm = local_diverging()
-n = 128;
-up = [linspace(0.15, 1, n)', linspace(0.55, 1, n)', linspace(0.25, 1, n)'];
-dn = [linspace(1, 0.80, n)', linspace(1, 0.25, n)', linspace(1, 0.20, n)'];
-cm = [up; dn];
+function shade_mask(ax, t, mask)
+% grey bands over the time intervals where mask is true
+d = diff([0, mask(:)', 0]);
+on = find(d == 1); off = find(d == -1) - 1;
+yl = ylim(ax);
+for i = 1:numel(on)
+    x0 = t(on(i)); x1 = t(min(off(i) + 1, numel(t)));
+    hp = patch(ax, [x0 x1 x1 x0], [yl(1) yl(1) yl(2) yl(2)], [0.88 0.88 0.88], 'EdgeColor', 'none', ...
+        'HandleVisibility', 'off');
+    uistack(hp, 'bottom');
 end
+ylim(ax, yl);
+end
+
