@@ -89,20 +89,19 @@ colors = [0.25 0.55 0.85; 0.85 0.35 0.25; 0.50 0.35 0.70; 0.15 0.68 0.38];
 markers = {'o', 's', 'd', 'p'};
 isA0 = @(o) o.case.part == 'A' && o.case.freq == cfg.freq0 && o.case.cpu == cfg.cpu0;
 
-% Fig 1: proposed trace, lemniscate, S4, 50 Hz, CPU 50 %, first seed
+% Fig 1: scheduler trace, lemniscate, S4, 50 Hz, CPU 50 %, first seed
 id1 = find(cellfun(@(o) isA0(o) && o.case.traj == 1 && o.case.level == 4, B), 1);
 o = B{id1}; tr = o.traces{iP}; n = tr.n_done; t = o.t(1:n);
-f1 = figure('Name', 'Fig 1', 'Color', 'w', 'Position', [80, 80, 980, 520]);
+f1 = paper_figure(174, 110);
 tl = tiledlayout(f1, 3, 1, 'TileSpacing', 'compact');
 ax = nexttile(tl); plot(ax, t, 100 * tr.cpu(1:n), 'k-', 'LineWidth', 0.8); ylabel(ax, 'CPU load (%)'); grid(ax, 'on');
 ax = nexttile(tl); hold(ax, 'on'); plot(ax, t, tr.lat(1:n), 'b-', 'LineWidth', 1.0);
 yline(ax, o.budget, 'r--', sprintf('Budget %.0f ms', o.budget), 'LineWidth', 1.3); ylabel(ax, 'Solve latency (ms)'); grid(ax, 'on');
 ax = nexttile(tl); stairs(ax, t, tr.N(1:n), 'Color', colors(iP, :), 'LineWidth', 1.2);
 ylabel(ax, 'Selected N'); xlabel(ax, 'Time (s)'); grid(ax, 'on');
-title(tl, 'Fig 1: Proposed Tiny-ML scheduler (lemniscate, S4, 50 Hz, mean CPU load 50%)');
 
 % Fig 2: RMSE vs level at the nominal rate / load, with 95 % CI
-f2 = figure('Name', 'Fig 2', 'Color', 'w', 'Position', [100, 100, 1200, 440]);
+f2 = paper_figure(174, 70);
 tl = tiledlayout(f2, 1, nT, 'TileSpacing', 'compact');
 for trj = 1:nT
     ax = nexttile(tl); hold(ax, 'on');
@@ -117,13 +116,12 @@ for trj = 1:nT
             'MarkerFaceColor', colors(c, :), 'CapSize', 3);
     end
     set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); grid(ax, 'on');
-    title(ax, cfg.trajectories{trj}); ylabel(ax, 'Position RMSE (m)');
+    title(ax, sprintf('(%c) %s', 'a' + trj - 1, cfg.trajectories{trj}), 'FontWeight', 'normal'); ylabel(ax, 'Position RMSE (m)');
 end
-legend(nexttile(tl, 1), cfg.labels, 'Location', 'northwest', 'FontSize', 8);
-title(tl, sprintf('Fig 2: Tracking error vs scenario level (50 Hz, CPU 50%%; mean and 95%% CI over %d seeds, crashed runs excluded)', nSeed));
+lg = legend(nexttile(tl, 1), cfg.labels, 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
 
 % Fig 3: crash rate, deadline misses, solver time vs level (Part A pooled)
-f3 = figure('Name', 'Fig 3', 'Color', 'w', 'Position', [120, 120, 1200, 420]);
+f3 = paper_figure(174, 70);
 tl = tiledlayout(f3, 1, 3, 'TileSpacing', 'compact');
 CR = nan(nL, nC); MS = CR; CP = CR;
 for s = 1:nL
@@ -139,11 +137,10 @@ set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylab
 ax = nexttile(tl); hold(ax, 'on');
 for c = 1:nC, plot(ax, 1:nL, CP(:, c), ['-' markers{c}], 'Color', colors(c, :), 'LineWidth', 1.4); end
 set(ax, 'XTick', 1:nL, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30); ylabel(ax, 'Solver time per second of flight (ms/s)'); grid(ax, 'on');
-legend(ax, cfg.labels, 'Location', 'northwest', 'FontSize', 8);
-title(tl, 'Fig 3: Safety and real-time cost vs scenario level (Part A: all trajectories, rates and CPU loads)');
+lg = legend(ax, cfg.labels, 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
 
 % Fig 8: relative RMSE change of Proposed vs Fixed N=5 over rate x CPU load, per level
-f8 = figure('Name', 'Fig 8', 'Color', 'w', 'Position', [140, 140, 1250, 640]);
+f8 = paper_figure(174, 105);
 tl = tiledlayout(f8, 2, 3, 'TileSpacing', 'compact');
 for s = 1:nL
     Hm = nan(numel(cfg.cpu_set), numel(cfg.freqs));
@@ -161,16 +158,15 @@ for s = 1:nL
         'YTickLabel', 100 * cfg.cpu_set, 'YDir', 'normal');
     for i = 1:numel(cfg.cpu_set)
         for j = 1:numel(cfg.freqs)
-            if ~isnan(Hm(i, j)), text(ax, j, i, sprintf('%+.0f%%', Hm(i, j)), 'HorizontalAlignment', 'center', 'FontSize', 8); end
+            if ~isnan(Hm(i, j)), text(ax, j, i, sprintf('%+.0f%%', Hm(i, j)), 'HorizontalAlignment', 'center', 'FontSize', 7); end
         end
     end
-    title(ax, cfg.levels{s}); xlabel(ax, 'Control rate (Hz)'); ylabel(ax, 'Mean CPU load (%)');
+    title(ax, sprintf('(%c) %s', 'a' + s - 1, cfg.levels{s}), 'FontWeight', 'normal'); xlabel(ax, 'Control rate (Hz)'); ylabel(ax, 'Mean CPU load (%)');
 end
-cb = colorbar(ax); cb.Layout.Tile = 'east'; cb.Label.String = 'Proposed vs Fixed N=5: RMSE change (%)';
-title(tl, 'Fig 8: Relative tracking-error change of Proposed vs Fixed N=5 (negative = better; grey = not comparable, crashes)');
+cb = colorbar(ax); cb.Layout.Tile = 'east'; cb.Label.String = 'RMSE change vs Fixed N = 5 (%)';
 
 % Fig 9: Parts B and C, relative change vs Fixed N=5 and vs Nominal per level
-f9 = figure('Name', 'Fig 9', 'Color', 'w', 'Position', [160, 160, 1150, 440]);
+f9 = paper_figure(174, 70);
 tl = tiledlayout(f9, 1, 2, 'TileSpacing', 'compact');
 conds = {@(o) o.case.part == 'B' && o.case.dist == 0, 'disturbance 0'; ...
          @(o) isA0(o), 'disturbance 0.5 (Part A)'; ...
@@ -186,17 +182,12 @@ for bb = [1, 3]
     end
     bar(ax, V); grid(ax, 'on'); set(ax, 'XTickLabel', cfg.levels, 'XTickLabelRotation', 30);
     ylabel(ax, sprintf('RMSE change vs %s (%%)', cfg.labels{bb}));
-    legend(ax, conds(:, 2), 'Location', 'southwest', 'FontSize', 8);
 end
-title(tl, 'Fig 9: Robustness of the improvement to disturbance level and weights (mean over trajectories; negative = Proposed better)');
+lg = legend(ax, conds(:, 2), 'Orientation', 'horizontal'); lg.Layout.Tile = 'north';
 
-figs = {f1, 'Fig_1.pdf'; f2, 'Fig_2.pdf'; f3, 'Fig_3.pdf'; f8, 'Fig_8.pdf'; f9, 'Fig_9.pdf'};
+figs = {f1, 'Fig_1'; f2, 'Fig_2'; f3, 'Fig_3'; f8, 'Fig_8'; f9, 'Fig_9'};
 for i = 1:size(figs, 1)
-    try
-        exportgraphics(figs{i, 1}, figs{i, 2}, 'ContentType', 'vector');
-    catch
-        print(figs{i, 1}, figs{i, 2}, '-dpdf', '-painters');
-    end
+    export_figure(figs{i, 1}, figs{i, 2});
 end
 save('benchmark_results.mat', 'B', 'cfg', 'rel', 'win', 'crash', 'rm', 'miss', 'cpu');
 end

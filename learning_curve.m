@@ -50,45 +50,6 @@ lc.hist = hist;
 fprintf('Epoch curve: best validation MAE %.4f ms at epoch %d (stopped at %d).\n', ...
     min(hist.val_mae), hist.best_epoch, numel(hist.val_mae));
 
-% ---- Figures ------------------------------------------------------------------
-f5 = figure('Name', 'Fig 4: Learning curve', 'Color', 'w', 'Position', [160, 160, 760, 440]);
-hold on;
-cols = [0.15 0.68 0.38; 0.50 0.50 0.50];
-lab = {'Tiny-ML MLP (black-box)', 'Linear regression (black-box)'};
-h = gobjects(2, 1);
-for k = 1:2
-    mu = mean(mae(:, :, k), 2); sd = std(mae(:, :, k), 0, 2);
-    lo = max(mu - sd, 0.05 * mu);   % keep the band positive on the log axis
-    patch([sizes, fliplr(sizes)], [lo; flipud(mu + sd)]', cols(k, :), 'FaceAlpha', 0.15, 'EdgeColor', 'none');
-    h(k) = plot(sizes, mu, '-o', 'Color', cols(k, :), 'LineWidth', 1.6, 'MarkerSize', 5);
-end
-xline(lc.n_sat, 'k--', sprintf('saturation (n = %d)', lc.n_sat), 'LineWidth', 1.2);
-set(gca, 'XScale', 'log', 'YScale', 'log');
-xlabel('Number of training samples');
-ylabel('Test MAE (ms)');
-title('Fig 4: Learning curve of the latency predictor (mean \pm std over repeats)');
-legend(h, lab, 'Location', 'southwest');
-grid on;
-
-f6 = figure('Name', 'Fig 5: Epoch curve', 'Color', 'w', 'Position', [180, 180, 760, 420]);
-semilogy(hist.train_loss, 'LineWidth', 1.5); hold on;
-semilogy(hist.val_loss, 'LineWidth', 1.5);
-xline(hist.best_epoch, 'k--', sprintf('best epoch %d', hist.best_epoch), 'LineWidth', 1.2, ...
-    'LabelVerticalAlignment', 'middle', 'HandleVisibility', 'off');
-xlabel('Epoch'); ylabel('Huber loss');
-legend({'Training', 'Validation'}, 'Location', 'north');
-title('Fig 5: Training / validation loss of the Tiny-ML predictor');
-grid on;
-
-export_vector(f5, 'Fig_4.pdf');
-export_vector(f6, 'Fig_5.pdf');
 save('learning_curve.mat', 'lc');
-end
-
-function export_vector(fh, name)
-try
-    exportgraphics(fh, name, 'ContentType', 'vector');
-catch
-    print(fh, name, '-dpdf', '-painters');
-end
+plot_learning_curve(lc);
 end

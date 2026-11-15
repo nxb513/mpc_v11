@@ -2,7 +2,7 @@ function plot_architecture()
 % PLOT_ARCHITECTURE Diagram of the deployed Tiny-ML latency predictor (read from
 % trained_predictor.mat): representative neurons per layer, a vertical ellipsis
 % and unit count for wide layers, layer captions, and the pre-processing (z-score)
-% and post-processing (exp) blocks. Exports Fig_6.pdf (width 7.16 in).
+% and post-processing (exp) blocks. Exports Fig_6 (174 mm wide).
 
 s = load('trained_predictor.mat');
 mdl = s.model;
@@ -11,11 +11,11 @@ L = numel(dims);
 in_sym  = {'$N$', '$I_{\max}$', '$u_{\mathrm{cpu}}$', '$\|e_{p}\|$', '$\|e_{v}\|$'};
 in_desc = {'horizon', 'iter. cap', 'CPU load', 'pos. error', 'vel. error'};
 
-fh = figure('Color', 'w', 'Units', 'inches', 'Position', [1, 1, 7.16, 3.1]);
+fh = paper_figure(174, 72);
 ax = axes(fh, 'Position', [0 0 1 1]); hold(ax, 'on'); axis(ax, 'off');
-set(ax, 'XLim', [0, 10.9], 'YLim', [-0.05, 4.45]);
+set(ax, 'XLim', [0, 10.9], 'YLim', [-0.05, 3.95]);
 
-FS = 9;                              % base font size (pt)
+FS = 8;                              % base font size (pt)
 x_sym  = 2.20;                       % right edge of feature symbols
 x_norm = 3.10;                       % z-score block centre
 x_lay  = linspace(4.40, 7.95, L);    % neuron columns
@@ -120,18 +120,7 @@ if mdl.log_target
     local_caption(ax, x_exp, yo + 0.55, {'Post-processing'}, FS);
 end
 
-% header
-arch_str = strjoin(arrayfun(@num2str, dims, 'UniformOutput', false), '-');
-text(ax, 5.6, 4.25, sprintf(['Fully connected %s network: %d parameters, %d FLOPs per inference ' ...
-    '(Huber loss, Adam, early stopping)'], arch_str, mdl.n_params, mdl.flops), ...
-    'FontSize', FS, 'HorizontalAlignment', 'center', 'VerticalAlignment', 'middle');
-
-try
-    exportgraphics(fh, 'Fig_6.pdf', 'ContentType', 'vector');
-catch
-    set(fh, 'PaperPositionMode', 'auto', 'PaperUnits', 'inches', 'PaperSize', [7.16, 3.1]);
-    print(fh, 'Fig_6.pdf', '-dpdf', '-painters');
-end
+export_figure(fh, 'Fig_6');
 end
 
 function local_rbox(ax, x, y, w, h, rad, face, alpha, edge)

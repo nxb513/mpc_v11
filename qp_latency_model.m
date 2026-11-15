@@ -20,7 +20,7 @@ if isempty(cal)
 end
 
 nU = N * nu;
-n  = nU + 1;                                  % decision variables (inputs + 1 slack)
+n  = nU + 2;                                  % decision variables (inputs + 2 slacks)
 F_iter  = cal.c_iter * n^2 + 2 * n * m_ineq;
 % Online LTV condensing (matrices change every step), flop counts:
 %   free response 2 N nx^2, Su blocks 2 N^2 nx^2 nu, Q*Su and Su'*Q*Su

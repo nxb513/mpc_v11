@@ -6,7 +6,7 @@ end
 ctx = res.ctx; sizes = res.sizes; rel_mlp = res.rel_mlp; rel_lin = res.rel_lin; n_sat = res.n_sat;
 K = numel(ctx);
 labels = cellfun(@(c) c.label, ctx, 'UniformOutput', false);
-f7 = figure('Name', 'Fig 7', 'Color', 'w', 'Position', [100, 100, 1100, 540]);
+f7 = paper_figure(174, 100);
 tl = tiledlayout(f7, 2, 4, 'TileSpacing', 'compact', 'Padding', 'compact');
 for k = 1:K
     ax = nexttile(tl); hold(ax, 'on');
@@ -22,7 +22,7 @@ for k = 1:K
     end
     set(ax, 'XScale', 'log', 'YScale', 'log', 'FontSize', 8, 'XLim', [18, 7e4], ...
         'XTick', [1e2, 1e3, 1e4], 'XTickLabel', {'10^2', '10^3', '10^4'});
-    title(ax, labels{k}, 'FontSize', 9);
+    title(ax, sprintf('(%c) %s', 'a' + k - 1, labels{k}), 'FontWeight', 'normal', 'FontSize', 7);
     grid(ax, 'on'); box(ax, 'on');
     if k == K
         legend(ax, [h1, h2], {'Tiny-ML (fixed arch.)', 'Linear regression'}, 'Location', 'southwest', 'FontSize', 7);
@@ -30,10 +30,5 @@ for k = 1:K
 end
 xlabel(tl, 'Number of collected training samples');
 ylabel(tl, 'Relative test MAE (%)');
-title(tl, 'Fig 7: Learning curves of the fixed Tiny-ML architecture under different hidden latency formulas');
-try
-    exportgraphics(f7, 'Fig_7.pdf', 'ContentType', 'vector');
-catch
-    print(f7, 'Fig_7.pdf', '-dpdf', '-painters');
-end
+export_figure(f7, 'Fig_7');
 end

@@ -44,7 +44,7 @@ switch lower(mode)
                 if strcmpi(mode, 'proposed')
                     t_hat = tiny_ml_predictor(CAND_N(iN), CAND_I(iI), cpu_load, pos_err_norm, vel_err_norm);   % calibrated upper bound
                 else
-                    t_hat = qp_latency_model(CAND_N(iN), nx, nu, 14 * CAND_N(iN) + 1, CAND_I(iI), cpu_load, 1.0);
+                    t_hat = qp_latency_model(CAND_N(iN), nx, nu, 14 * CAND_N(iN) + 2, CAND_I(iI), cpu_load, 1.0);
                 end
                 if t_hat <= T_budget_ms
                     N_sel = CAND_N(iN); iter_sel = CAND_I(iI); found = true; break;
