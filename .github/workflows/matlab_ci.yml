@@ -1,36 +1,140 @@
-name: Run MPC Simulation Benchmark
+name: LTV-MPC benchmark (parallel)
 
 on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  MATLAB_RELEASE: R2024a
+  MATLAB_PRODUCTS: Control_System_Toolbox Optimization_Toolbox
+
 jobs:
-  run-matlab-simulation:
+  # 1. Tiny-ML: dataset -> architecture search -> training -> learning curves
+  train:
     runs-on: ubuntu-latest
+    timeout-minutes: 240
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up MATLAB
-        uses: matlab-actions/setup-matlab@v2
+      - uses: actions/checkout@v4
+      - uses: matlab-actions/setup-matlab@v2
         with:
-          products: Control_System_Toolbox Optimization_Toolbox
-
-      - name: Run Full Simulation and Export Vector PDFs
+          release: ${{ env.MATLAB_RELEASE }}
+          products: ${{ env.MATLAB_PRODUCTS }}
+      - name: Train Tiny-ML latency predictor
         uses: matlab-actions/run-command@v2
         with:
           command: |
-            main_simulation;
-            figs = findall(0, 'Type', 'figure');
-            for i = 1:length(figs)
-                saveas(figs(i), sprintf('Fig_%d.png', figs(i).Number));
-            end
-
-      - name: Upload Generated PDF & PNG Figures
-        uses: actions/upload-artifact@v4
+            diary('train_log.txt');
+            generate_large_dataset(); architecture_search(); train_model();
+            learning_curve(); plot_architecture();
+            diary off;
+      - uses: actions/upload-artifact@v4
         with:
-          name: simulation-figures
+          name: tinyml
+          path: |
+            arch_choice.mat
+            trained_predictor.mat
+            learning_curve.mat
+            Fig_4.pdf
+            Fig_5.pdf
+            Fig_6.pdf
+            train_log.txt
+
+  # 2. Closed-loop benchmark: one job per case of experiment_config.m
+  bench:
+    needs: train
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      matrix:
+        case: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+               21, 22, 23, 24, 25, 26, 27, 28, 29]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tinyml
+      - uses: matlab-actions/setup-matlab@v2
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          products: ${{ env.MATLAB_PRODUCTS }}
+      - name: Run benchmark case ${{ matrix.case }}
+        uses: matlab-actions/run-command@v2
+        with:
+          command: bench_case(${{ matrix.case }});
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-case-${{ matrix.case }}
+          path: results/*.mat
+
+  # 3. Tiny-ML on hidden latency formulas: one job per formula
+  contexts:
+    needs: train
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        k: [1, 2, 3, 4, 5, 6, 7, 8]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tinyml
+      - uses: matlab-actions/setup-matlab@v2
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          products: ${{ env.MATLAB_PRODUCTS }}
+      - name: Run latency context ${{ matrix.k }}
+        uses: matlab-actions/run-command@v2
+        with:
+          command: context_case(${{ matrix.k }});
+      - uses: actions/upload-artifact@v4
+        with:
+          name: context-${{ matrix.k }}
+          path: results/*.mat
+
+  # 4. Tables and figures
+  report:
+    needs: [bench, contexts]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tinyml
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bench-case-*
+          path: results
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: context-*
+          path: results
+          merge-multiple: true
+      - uses: matlab-actions/setup-matlab@v2
+        with:
+          release: ${{ env.MATLAB_RELEASE }}
+          products: ${{ env.MATLAB_PRODUCTS }}
+      - name: Build report
+        uses: matlab-actions/run-command@v2
+        with:
+          command: |
+            diary('report_log.txt');
+            report_results('results');
+            try, combine_context_results('results'); catch ME, disp(ME.message); end
+            diary off;
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
           path: |
             Fig_*.pdf
-            Fig_*.png
+            report_log.txt
+            train_log.txt
+            benchmark_results.mat
+            context_study.mat
+            results/*.mat
